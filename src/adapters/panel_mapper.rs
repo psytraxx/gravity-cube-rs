@@ -1,4 +1,4 @@
-use crate::domain::{Position, Direction, PanelConfig};
+use crate::domain::{Direction, PanelConfig, Position};
 
 /// Panel mapper converts 3D cube coordinates to 2D panel LED indices
 pub struct PanelMapper {
@@ -109,7 +109,7 @@ impl PanelMapper {
 
     /// Convert 3D position to LED indices for all visible panels
     /// Returns iterator of (led_index, panel_bits)
-    pub fn position_to_led_indices(&self, pos: Position) -> PanelLedIndices {
+    pub fn position_to_led_indices<'a>(&'a self, pos: Position) -> PanelLedIndices<'a> {
         let mask = self.get_panel_mask(pos);
         PanelLedIndices {
             mapper: self,
@@ -123,12 +123,7 @@ impl PanelMapper {
         self.panels.iter().find(|p| p.direction == direction)
     }
 
-    fn calculate_led_index(
-        &self,
-        panel: &PanelConfig,
-        mut x: u8,
-        mut y: u8,
-    ) -> u16 {
+    fn calculate_led_index(&self, panel: &PanelConfig, mut x: u8, mut y: u8) -> u16 {
         // Apply orientation transformation
         let (new_x, new_y) = match panel.orientation {
             0 => (x, y),

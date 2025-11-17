@@ -1,7 +1,7 @@
-use crate::domain::{Vector3D, Vector3DExt};
+use crate::domain::Vector3D;
 use crate::ports::ImuPort;
+use bmi160::Bmi160;
 use embedded_hal::spi::SpiDevice;
-use embedded_hal::delay::DelayNs;
 
 #[derive(Debug)]
 pub enum Bmi160Error<E> {
@@ -9,9 +9,8 @@ pub enum Bmi160Error<E> {
 }
 
 /// BMI160 IMU driver wrapper using the bmi160 crate
-pub struct Bmi160Adapter<SPI, DELAY> {
-    sensor: bmi160::Bmi160<bmi160::interface::SpiInterface<SPI>>,
-    delay: DELAY,
+pub struct Bmi160Adapter<SPI> {
+    sensor: Bmi160<bmi160::interface::SpiInterface<SPI>>,
     /// Sensor orientation mapping (swap axes based on physical mounting)
     /// Original C code: unit_vector.x = sensor_data.z / magnitude
     ///                  unit_vector.y = sensor_data.y / magnitude
@@ -19,17 +18,15 @@ pub struct Bmi160Adapter<SPI, DELAY> {
     swap_axes: bool,
 }
 
-impl<SPI, DELAY, E> Bmi160Adapter<SPI, DELAY>
+impl<SPI, E> Bmi160Adapter<SPI>
 where
     SPI: SpiDevice<Error = E>,
-    DELAY: DelayNs,
 {
-    pub fn new(spi: SPI, delay: DELAY) -> Result<Self, Bmi160Error<E>> {
-        let sensor = bmi160::Bmi160::new_with_spi(spi);
+    pub fn new(spi: SPI) -> Result<Self, Bmi160Error<E>> {
+        let sensor = Bmi160::new_with_spi(spi);
 
         let adapter = Self {
             sensor,
-            delay,
             swap_axes: true, // Match C code orientation
         };
 
@@ -74,10 +71,9 @@ where
     }
 }
 
-impl<SPI, DELAY, E> ImuPort for Bmi160Adapter<SPI, DELAY>
+impl<SPI, E> ImuPort for Bmi160Adapter<SPI>
 where
     SPI: SpiDevice<Error = E>,
-    DELAY: DelayNs,
 {
     type Error = Bmi160Error<E>;
 

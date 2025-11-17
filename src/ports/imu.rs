@@ -5,5 +5,5 @@ pub trait ImuPort {
     type Error;
 
     /// Read accelerometer data and return as a normalized unit vector
-    async fn read_gravity(&mut self) -> Result<Vector3D, Self::Error>;
+    fn read_gravity(&mut self) -> impl Future<Output = Result<Vector3D, Self::Error>>;
 }

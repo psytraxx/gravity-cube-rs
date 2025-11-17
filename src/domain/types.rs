@@ -222,7 +222,7 @@ pub enum Direction {
 #[derive(Debug, Clone, Copy)]
 pub struct PanelConfig {
     pub panel_num: u8,
-    pub orientation: u16,  // 0, 90, 180, 270
+    pub orientation: u16, // 0, 90, 180, 270
     pub direction: Direction,
     pub inverted_x: bool,
     pub inverted_y: bool,

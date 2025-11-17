@@ -61,52 +61,27 @@ impl Simulation {
             let prefer_right = random_fn();
 
             // Try down movement first
-            if let Some(new_pos) = self.try_move(
-                &pos,
-                &move_params.down,
-                velocity,
-                size,
-            ) {
+            if let Some(new_pos) = self.try_move(&pos, &move_params.down, velocity, size) {
                 self.move_pixel(i, new_pos, &mut moved_indices);
                 continue;
             }
 
             // Try right/left based on random preference
             if prefer_right {
-                if let Some(new_pos) = self.try_move(
-                    &pos,
-                    &move_params.right,
-                    velocity,
-                    size,
-                ) {
+                if let Some(new_pos) = self.try_move(&pos, &move_params.right, velocity, size) {
                     self.move_pixel(i, new_pos, &mut moved_indices);
                     continue;
                 }
-                if let Some(new_pos) = self.try_move(
-                    &pos,
-                    &move_params.left,
-                    velocity,
-                    size,
-                ) {
+                if let Some(new_pos) = self.try_move(&pos, &move_params.left, velocity, size) {
                     self.move_pixel(i, new_pos, &mut moved_indices);
                     continue;
                 }
             } else {
-                if let Some(new_pos) = self.try_move(
-                    &pos,
-                    &move_params.left,
-                    velocity,
-                    size,
-                ) {
+                if let Some(new_pos) = self.try_move(&pos, &move_params.left, velocity, size) {
                     self.move_pixel(i, new_pos, &mut moved_indices);
                     continue;
                 }
-                if let Some(new_pos) = self.try_move(
-                    &pos,
-                    &move_params.right,
-                    velocity,
-                    size,
-                ) {
+                if let Some(new_pos) = self.try_move(&pos, &move_params.right, velocity, size) {
                     self.move_pixel(i, new_pos, &mut moved_indices);
                     continue;
                 }
@@ -130,9 +105,13 @@ impl Simulation {
             let new_z = pos.z as i32 + F32Ext::round(direction.z * scale) as i32;
 
             // Check bounds
-            if new_x < 0 || new_x >= size as i32 ||
-               new_y < 0 || new_y >= size as i32 ||
-               new_z < 0 || new_z >= size as i32 {
+            if new_x < 0
+                || new_x >= size as i32
+                || new_y < 0
+                || new_y >= size as i32
+                || new_z < 0
+                || new_z >= size as i32
+            {
                 continue;
             }
 

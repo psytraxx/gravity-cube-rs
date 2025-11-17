@@ -32,7 +32,6 @@ esp-backtrace = { version = "0.18.1", features = [
 esp-println = { version = "0.16.1", features = ["esp32", "log-04"] }
 
 critical-section = "1.2.0"
-static_cell      = "2.1.1"
 
 # Math libraries
 micromath = { version = "2.1.0", features = ["vector"] }
@@ -40,8 +39,8 @@ micromath = { version = "2.1.0", features = ["vector"] }
 # Embedded utilities
 embedded-hal = "1.0.0"
 embedded-hal-async = "1.0.0"
-embedded-hal-bus = { version = "0.2.0", features = ["async"] }
-heapless = "0.8"
+embedded-hal-bus = { version = "0.3.0", features = ["async"] }
+heapless = "0.9.2"
 
 # Random number generation
 rand_core = { version = "0.9.3", default-features = false }

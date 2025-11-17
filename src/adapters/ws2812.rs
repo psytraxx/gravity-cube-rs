@@ -1,7 +1,7 @@
-use crate::domain::{Position, Color};
-use crate::ports::DisplayPort;
 use crate::adapters::PanelMapper;
-use smart_leds::SmartLedsWrite;
+use crate::domain::{Color, Position};
+use crate::ports::DisplayPort;
+use smart_leds::SmartLedsWriteAsync;
 
 /// WS2812 LED Display adapter using RMT (ESP32's remote control peripheral)
 pub struct Ws2812Display<RMT, C = smart_leds::RGB<u8>>
@@ -16,7 +16,7 @@ where
 
 impl<RMT, C> Ws2812Display<RMT, C>
 where
-    RMT: SmartLedsWrite<Color = C>,
+    RMT: SmartLedsWriteAsync<Color = C>,
     C: From<(u8, u8, u8)> + Default + Copy,
 {
     pub fn new(driver: RMT, max_leds: usize) -> Self {
@@ -37,14 +37,16 @@ where
 
 impl<RMT, C> DisplayPort for Ws2812Display<RMT, C>
 where
-    RMT: SmartLedsWrite<Color = C>,
+    RMT: SmartLedsWriteAsync<Color = C>,
     C: From<(u8, u8, u8)> + Default + Copy,
 {
     type Error = RMT::Error;
 
     async fn clear(&mut self) -> Result<(), Self::Error> {
         self.clear_buffer();
-        self.driver.write(self.buffer[..self.max_leds].iter().cloned())?;
+        self.driver
+            .write(self.buffer[..self.max_leds].iter().cloned())
+            .await?;
         Ok(())
     }
 
@@ -59,7 +61,9 @@ where
     }
 
     async fn refresh(&mut self) -> Result<(), Self::Error> {
-        self.driver.write(self.buffer[..self.max_leds].iter().cloned())?;
+        self.driver
+            .write(self.buffer[..self.max_leds].iter().cloned())
+            .await?;
         Ok(())
     }
 }

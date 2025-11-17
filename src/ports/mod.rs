@@ -1,7 +1,5 @@
-pub mod imu;
 pub mod display;
-pub mod random;
+pub mod imu;
 
-pub use imu::ImuPort;
 pub use display::DisplayPort;
-pub use random::RandomPort;
+pub use imu::ImuPort;

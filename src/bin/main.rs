@@ -10,20 +10,21 @@ use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
 use esp_backtrace as _;
 use esp_hal::clock::CpuClock;
-use esp_hal::timer::timg::TimerGroup;
-use esp_hal::gpio::Level;
-use esp_hal::spi::master::Spi;
 use esp_hal::delay::Delay;
+use esp_hal::gpio::{Level, OutputConfig};
 use esp_hal::rmt::Rmt;
+use esp_hal::spi::master::Config as SpiConfig;
+use esp_hal::spi::master::Spi;
+use esp_hal::time::Rate;
+use esp_hal::timer::timg::TimerGroup;
 use log::{info, warn};
 
 extern crate alloc;
 
-use firmware::domain::{Simulation, Config, Color, Vector3D};
+use esp_hal_smartled::{SmartLedsAdapterAsync, buffer_size_async};
 use firmware::adapters::{Bmi160Adapter, Ws2812Display};
-use firmware::ports::{ImuPort, DisplayPort};
-use smart_leds::{RGB8, SmartLedsWrite};
-use esp_hal_smartled::{smartLedBuffer, SmartLedsAdapter};
+use firmware::domain::{Color, Config, Simulation, Vector3D};
+use firmware::ports::DisplayPort;
 
 // This creates a default app-descriptor required by the esp-idf bootloader.
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -73,26 +74,23 @@ async fn main(_spawner: Spawner) -> ! {
     // - CS:    GPIO 5
 
     // Pin assignment for WS2812 LEDs (RMT):
-    // - DATA:  GPIO 37
+    // - DATA:  GPIO 16 (changed from 37 for ESP32 compatibility)
 
     // Initialize SPI for BMI160 IMU
     info!("  • Setting up SPI for BMI160 IMU...");
-    let spi_bus = Spi::new(peripherals.SPI2, 1_000_000_u32) // 1 MHz for BMI160
+    let config = SpiConfig::default().with_frequency(Rate::from_mhz(1));
+    let spi_bus = Spi::new(peripherals.SPI2, config) // 1 MHz for BMI160
         .expect("Failed to create SPI")
         .with_sck(peripherals.GPIO18)
         .with_mosi(peripherals.GPIO23)
         .with_miso(peripherals.GPIO19);
 
-    let cs = esp_hal::gpio::Output::new(
-        peripherals.GPIO5,
-        Level::High,
-        esp_hal::gpio::OutputConfig::default(),
-    );
-    let spi_device = embedded_hal_bus::spi::ExclusiveDevice::new(spi_bus, cs, Delay::new());
+    let cs = esp_hal::gpio::Output::new(peripherals.GPIO5, Level::High, OutputConfig::default());
+    let spi_device = embedded_hal_bus::spi::ExclusiveDevice::new(spi_bus, cs, Delay::new())
+        .expect("Failed to create SPI device");
 
     // Initialize BMI160 IMU
-    let delay = Delay::new();
-    let mut imu = match Bmi160Adapter::new(spi_device, delay) {
+    let mut imu = match Bmi160Adapter::new(spi_device) {
         Ok(imu) => {
             info!("  ✓ BMI160 IMU initialized successfully");
             imu
@@ -110,19 +108,17 @@ async fn main(_spawner: Spawner) -> ! {
 
     // Initialize RMT for WS2812 LEDs
     info!("  • Setting up RMT for WS2812 LEDs...");
-    let rmt = Rmt::new(peripherals.RMT, 80_000_000_u32)
-        .expect("Failed to create RMT");
+    let rmt = Rmt::new(peripherals.RMT, Rate::from_mhz(80))
+        .expect("Failed to create RMT")
+        .into_async();
 
-    // Create RMT channel for WS2812 on GPIO 37
-    let rmt_buffer = smartLedBuffer!(384); // 384 LEDs
-    let led_driver = SmartLedsAdapter::new(
-        rmt.channel0,
-        peripherals.GPIO37.degrade(),
-        rmt_buffer,
-    );
+    // Create RMT channel for WS2812 on GPIO 16
+    // Buffer size for 384 LEDs
+    let mut rmt_buffer = [esp_hal::rmt::PulseCode::default(); buffer_size_async(384)];
+    let led_driver = SmartLedsAdapterAsync::new(rmt.channel0, peripherals.GPIO16, &mut rmt_buffer);
 
     let mut display = Ws2812Display::new(led_driver, 384);
-    info!("  ✓ WS2812 LED driver initialized (384 LEDs on GPIO 37)");
+    info!("  ✓ WS2812 LED driver initialized (384 LEDs on GPIO 16)");
 
     info!("");
     info!("Hardware initialization complete!");
@@ -144,11 +140,17 @@ async fn main(_spawner: Spawner) -> ! {
     let mut simulation = Simulation::new(sim_config);
     simulation.populate_particles(sim_config.num_particles);
 
-    info!("  • Cube size: {}x{}x{}", sim_config.cube_size, sim_config.cube_size, sim_config.cube_size);
+    info!(
+        "  • Cube size: {}x{}x{}",
+        sim_config.cube_size, sim_config.cube_size, sim_config.cube_size
+    );
     info!("  • Active particles: {}", sim_config.num_particles);
     info!("  • Velocity: {}", sim_config.velocity);
     info!("  • Update rate: {}ms", sim_config.delay_ms);
-    info!("  • LED color: RGB({}, {}, {})", sim_config.color.r, sim_config.color.g, sim_config.color.b);
+    info!(
+        "  • LED color: RGB({}, {}, {})",
+        sim_config.color.r, sim_config.color.g, sim_config.color.b
+    );
     info!("");
 
     let rng = SimpleRng;
@@ -167,7 +169,7 @@ async fn main(_spawner: Spawner) -> ! {
 
     loop {
         // Read gravity from IMU
-        let gravity = match imu.read_gravity().await {
+        let gravity = match imu.read_gravity() {
             Ok(g) => g,
             Err(_) => {
                 warn!("Failed to read IMU, using default gravity");
@@ -199,8 +201,10 @@ async fn main(_spawner: Spawner) -> ! {
         loop_count = loop_count.wrapping_add(1);
         if loop_count % 100 == 0 {
             let active_count = simulation.active_pixels().count();
-            info!("Loop {}: {} active particles, gravity: ({:.2}, {:.2}, {:.2})",
-                  loop_count, active_count, gravity.x, gravity.y, gravity.z);
+            info!(
+                "Loop {}: {} active particles, gravity: ({:.2}, {:.2}, {:.2})",
+                loop_count, active_count, gravity.x, gravity.y, gravity.z
+            );
         }
 
         // Delay for next frame
