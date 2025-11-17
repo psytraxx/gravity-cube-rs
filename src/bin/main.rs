@@ -13,6 +13,7 @@ use esp_hal::clock::CpuClock;
 use esp_hal::delay::Delay;
 use esp_hal::gpio::{Level, OutputConfig};
 use esp_hal::rmt::Rmt;
+use esp_hal::rng::Rng;
 use esp_hal::spi::master::Config as SpiConfig;
 use esp_hal::spi::master::Spi;
 use esp_hal::time::Rate;
@@ -30,18 +31,19 @@ use firmware::ports::DisplayPort;
 esp_bootloader_esp_idf::esp_app_desc!();
 
 /// Simple RNG using ESP32 hardware random
-struct SimpleRng;
+struct SimpleRng {
+    rng: Rng,
+}
 
 impl SimpleRng {
-    fn next_bool(&self) -> bool {
-        // Note: In a real implementation, you'd use esp_hal's RNG
-        // For now, we'll use a simple alternating pattern
-        // This should be replaced with actual hardware RNG
-        static mut COUNTER: u32 = 0;
-        unsafe {
-            COUNTER = COUNTER.wrapping_add(1);
-            (COUNTER & 1) == 0
+    fn new() -> Self {
+        Self {
+            rng: Rng::new(),
         }
+    }
+
+    fn next_bool(&self) -> bool {
+        self.rng.random() % 2 == 0
     }
 }
 
@@ -52,6 +54,7 @@ async fn main(_spawner: Spawner) -> ! {
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
 
+   
     esp_alloc::heap_allocator!(#[unsafe(link_section = ".dram2_uninit")] size: 98767);
 
     let timg0 = TimerGroup::new(peripherals.TIMG0);
@@ -153,7 +156,7 @@ async fn main(_spawner: Spawner) -> ! {
     );
     info!("");
 
-    let rng = SimpleRng;
+    let rng = SimpleRng::new();
 
     // Wait for sensors to stabilize
     Timer::after(Duration::from_secs(1)).await;
