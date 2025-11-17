@@ -43,7 +43,7 @@ impl SimpleRng {
     }
 
     fn next_bool(&self) -> bool {
-        self.rng.random() % 2 == 0
+        self.rng.random().is_multiple_of(2)
     }
 }
 
@@ -202,7 +202,7 @@ async fn main(_spawner: Spawner) -> ! {
 
         // Log status periodically (every 100 loops)
         loop_count = loop_count.wrapping_add(1);
-        if loop_count % 100 == 0 {
+        if loop_count.is_multiple_of(100) {
             let active_count = simulation.active_pixels().count();
             info!(
                 "Loop {}: {} active particles, gravity: ({:.2}, {:.2}, {:.2})",
