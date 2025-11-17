@@ -184,20 +184,20 @@ async fn main(_spawner: Spawner) -> ! {
         simulation.step(&gravity, || rng.next_bool());
 
         // Clear display
-        if let Err(_) = display.clear().await {
-            warn!("Display clear failed");
+        if let Err(e) = display.clear().await {
+            warn!("Display clear failed: {:?}", e);
         }
 
         // Update display with active pixels
         for pixel in simulation.active_pixels() {
-            if let Err(_) = display.set_pixel(pixel.position, sim_config.color).await {
-                // Silently ignore individual pixel errors
+            if let Err(e) = display.set_pixel(pixel.position, sim_config.color).await {
+                warn!("Failed to set pixel at {:?}: {:?}", pixel.position, e);
             }
         }
 
         // Refresh display to show changes
-        if let Err(_) = display.refresh().await {
-            warn!("Display refresh failed");
+        if let Err(e) = display.refresh().await {
+            warn!("Display refresh failed: {:?}", e);
         }
 
         // Log status periodically (every 100 loops)

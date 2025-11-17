@@ -1,5 +1,4 @@
 use super::types::*;
-use heapless::Vec;
 use micromath::F32Ext;
 
 /// Physics simulation engine for gravity particles
@@ -42,12 +41,15 @@ impl Simulation {
         let size = self.config.cube_size;
         let velocity = self.config.velocity as i32;
 
-        // Track moved pixels to prevent double-movement
-        let mut moved_indices: Vec<u16, 512> = Vec::new();
+        // Track moved pixels to prevent double-movement using bitset
+        // 512 bits = 8 x 64-bit words for O(1) lookups
+        let mut moved_indices: [u64; 8] = [0; 8];
 
         for i in 0..512 {
-            // Skip if already moved
-            if moved_indices.contains(&(i as u16)) {
+            // Skip if already moved (O(1) bitset check)
+            let word_idx = i / 64;
+            let bit_idx = i % 64;
+            if (moved_indices[word_idx] & (1 << bit_idx)) != 0 {
                 continue;
             }
 
@@ -127,15 +129,18 @@ impl Simulation {
         None
     }
 
-    /// Move a pixel and track the move
-    fn move_pixel(&mut self, old_index: usize, new_pos: Position, moved: &mut Vec<u16, 512>) {
+    /// Move a pixel and track the move in bitset
+    fn move_pixel(&mut self, old_index: usize, new_pos: Position, moved: &mut [u64; 8]) {
         let size = self.config.cube_size;
         let new_index = Self::index_from_coords(new_pos.x, new_pos.y, new_pos.z, size);
 
         self.pixels[new_index as usize].activate();
         self.pixels[old_index].deactivate();
 
-        let _ = moved.push(new_index);
+        // Mark as moved in bitset (O(1))
+        let word_idx = (new_index / 64) as usize;
+        let bit_idx = new_index % 64;
+        moved[word_idx] |= 1 << bit_idx;
     }
 
     /// Get all active pixels

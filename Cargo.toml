@@ -40,7 +40,6 @@ micromath = { version = "2.1.0", features = ["vector"] }
 embedded-hal = "1.0.0"
 embedded-hal-async = "1.0.0"
 embedded-hal-bus = { version = "0.3.0", features = ["async"] }
-heapless = "0.9.2"
 
 # Random number generation
 rand_core = { version = "0.9.3", default-features = false }
