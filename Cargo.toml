@@ -42,7 +42,7 @@ embedded-hal-async = "1.0.0"
 embedded-hal-bus = { version = "0.3.0", features = ["async"] }
 
 # Random number generation
-rand_core = { version = "0.9.3", default-features = false }
+rand_core = { version = "0.10.0", default-features = false }
 
 # BMI160 IMU driver
 bmi160 = "1.1.0"
