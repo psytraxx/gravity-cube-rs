@@ -22,7 +22,7 @@ use log::{info, warn};
 
 extern crate alloc;
 
-use esp_hal_smartled::{SmartLedsAdapterAsync, buffer_size_async};
+use esp_hal_smartled::{buffer_size_async, SmartLedsAdapterAsync};
 use firmware::adapters::{Bmi160Adapter, Ws2812Display};
 use firmware::domain::{Color, Config, Simulation, Vector3D};
 use firmware::ports::DisplayPort;
@@ -37,9 +37,7 @@ struct SimpleRng {
 
 impl SimpleRng {
     fn new() -> Self {
-        Self {
-            rng: Rng::new(),
-        }
+        Self { rng: Rng::new() }
     }
 
     fn next_bool(&self) -> bool {
@@ -54,11 +52,12 @@ async fn main(_spawner: Spawner) -> ! {
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
 
-   
     esp_alloc::heap_allocator!(#[unsafe(link_section = ".dram2_uninit")] size: 98767);
 
     let timg0 = TimerGroup::new(peripherals.TIMG0);
-    esp_rtos::start(timg0.timer0);
+    let sw_interrupt =
+        esp_hal::interrupt::software::SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
+    esp_rtos::start(timg0.timer0, sw_interrupt.software_interrupt0);
 
     info!("╔═══════════════════════════════════════╗");
     info!("║   Gravity Cube - Rust Edition v0.1   ║");
