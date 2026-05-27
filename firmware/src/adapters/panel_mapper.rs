@@ -1,4 +1,4 @@
-use crate::domain::{Direction, PanelConfig, Position};
+use gravity_cube_core::{Direction, PanelConfig, Position};
 
 /// Panel mapper converts 3D cube coordinates to 2D panel LED indices
 pub struct PanelMapper {

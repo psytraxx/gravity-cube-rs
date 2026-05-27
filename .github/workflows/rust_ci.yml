@@ -13,28 +13,62 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  SCCACHE_GHA_ENABLED: "true"
-  RUSTC_WRAPPER: "sccache"
-  
+
 jobs:
-  rust-checks:
-    name: Rust Checks
+  # Job for Desktop and Core (Stable Toolchain)
+  desktop-core:
+    name: Desktop & Core
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-      - name: Setup Rust
+
+      - name: Install Dependencies (Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libwayland-dev libxkbcommon-dev mesa-common-dev libgl1-mesa-dev pkg-config
+
+      - name: Setup Rust (Stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Enable caching
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check Core
+        run: cargo check -p gravity-cube-core
+
+      - name: Test Core & Desktop
+        run: cargo test -p gravity-cube-core -p gravity-cube-desktop
+
+      - name: Build Desktop
+        run: cargo build -p gravity-cube-desktop --release
+
+      - name: Clippy (Desktop & Core)
+        run: cargo clippy -p gravity-cube-core -p gravity-cube-desktop -- -D warnings
+
+  # Job for Firmware (ESP Toolchain)
+  firmware:
+    name: Firmware
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Rust (ESP)
         uses: esp-rs/xtensa-toolchain@v1.7
         with:
           default: true
           buildtargets: esp32
           ldproxy: false
-      - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.10
-      - name: Run build
-        run: cargo build  --release
-      - name: Run clippy
-        run: cargo clippy --all-features --workspace -- -D warnings
-      - name: Run sccache stat for check
-        shell: bash
-        run: ${SCCACHE_PATH} --show-stats
+
+      - name: Enable caching
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build Firmware
+        # Run inside firmware directory to pick up local .cargo/config.toml
+        working-directory: firmware
+        run: cargo build --release
+
+      - name: Clippy Firmware
+        working-directory: firmware
+        run: cargo clippy --release -- -D warnings

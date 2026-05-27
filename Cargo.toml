@@ -1,59 +1,22 @@
-[package]
-edition = "2024"
-name = "firmware"
+[workspace]
+resolver = "2"
+members = ["core", "firmware", "desktop"]
+
+[workspace.package]
+edition = "2021"
 rust-version = "1.88"
-version = "0.1.0"
+version = "0.2.0"
 
-[[bin]]
-name = "firmware"
-path = "./src/bin/main.rs"
-
-[dependencies]
-esp-hal = { version = "1.1.1", features = ["esp32", "log-04", "unstable"] }
-
-esp-rtos = { version = "0.3.0", features = [
-  "embassy",
-  "esp-alloc",
-  "esp32",
-  "log-04",
-] }
-
-esp-bootloader-esp-idf = { version = "0.5.0", features = ["esp32", "log-04"] }
-log = "0.4.30"
-
-embassy-executor = { version = "0.10.0", features = ["log"] }
-embassy-time = { version = "0.5.1", features = ["log"] }
-esp-alloc = "0.10.0"
-esp-backtrace = { version = "0.19.0", features = [
-  "esp32",
-  "panic-handler",
-  "println",
-] }
-esp-println = { version = "0.17.0", features = ["esp32", "log-04"] }
-
-critical-section = "1.2.0"
-
-# Math libraries
+[workspace.dependencies]
+# Shared core dependencies (no_std compatible)
 micromath = { version = "2.1.0", features = ["vector"] }
+log = "0.4.29"
 
-# Embedded utilities
-embedded-hal = "1.0.0"
-embedded-hal-async = "1.0.0"
-embedded-hal-bus = { version = "0.3.0", features = ["async"] }
-
-# Random number generation
-rand_core = { version = "0.10.1", default-features = false }
-
-# BMI160 IMU driver
-bmi160 = "1.1.0"
-
-# WS2812 LED driver
-smart-leds = "0.4.0"
-esp-hal-smartled = { git = "https://github.com/florianL21/esp-hal-community", branch = "main", package = "esp-hal-smartled" }
-
+# Core library (default-features = false for no_std compatibility, enable "std" feature explicitly in desktop)
+gravity-cube-core = { path = "./core", default-features = false }
 
 [profile.dev]
-# Rust debug is too slow.
+# Rust debug is too slow for embedded.
 # For debug builds always builds with some optimization
 opt-level = "s"
 

@@ -1,6 +1,5 @@
-use crate::adapters::PanelMapper;
-use crate::domain::{Color, Position};
-use crate::ports::DisplayPort;
+use super::PanelMapper;
+use gravity_cube_core::{Color, Position};
 use smart_leds::SmartLedsWriteAsync;
 
 /// WS2812 LED Display adapter using RMT (ESP32's remote control peripheral)
@@ -35,14 +34,13 @@ where
     }
 }
 
-impl<RMT, C> DisplayPort for Ws2812Display<RMT, C>
+impl<RMT, C> Ws2812Display<RMT, C>
 where
     RMT: SmartLedsWriteAsync<Color = C>,
     C: From<(u8, u8, u8)> + Default + Copy,
 {
-    type Error = RMT::Error;
-
-    async fn clear(&mut self) -> Result<(), Self::Error> {
+    /// Clear all LEDs (async version for firmware)
+    pub async fn clear(&mut self) -> Result<(), RMT::Error> {
         self.clear_buffer();
         self.driver
             .write(self.buffer[..self.max_leds].iter().cloned())
@@ -50,7 +48,8 @@ where
         Ok(())
     }
 
-    async fn set_pixel(&mut self, pos: Position, color: Color) -> Result<(), Self::Error> {
+    /// Set a pixel at a 3D position (async version for firmware)
+    pub async fn set_pixel(&mut self, pos: Position, color: Color) -> Result<(), RMT::Error> {
         // Get all LED indices for this 3D position
         for led_index in self.panel_mapper.position_to_led_indices(pos) {
             if (led_index as usize) < self.max_leds {
@@ -60,7 +59,8 @@ where
         Ok(())
     }
 
-    async fn refresh(&mut self) -> Result<(), Self::Error> {
+    /// Refresh/update the display to show changes (async version for firmware)
+    pub async fn refresh(&mut self) -> Result<(), RMT::Error> {
         self.driver
             .write(self.buffer[..self.max_leds].iter().cloned())
             .await?;

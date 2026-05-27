@@ -1,0 +1,52 @@
+[package]
+name = "gravity-cube-firmware"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "firmware"
+path = "src/main.rs"
+
+[dependencies]
+# Core library with effects (no_std mode - disable default features)
+gravity-cube-core = { workspace = true, default-features = false }
+
+# Math utilities (for F32Ext trait in no_std)
+micromath.workspace = true
+
+# ESP32 dependencies
+esp-hal = { version = "1.1.1", features = ["esp32", "log-04", "unstable"] }
+esp-rtos = { version = "0.3.0", features = [
+  "embassy",
+  "esp-alloc",
+  "esp32",
+  "log-04",
+] }
+esp-bootloader-esp-idf = { version = "0.5.0", features = ["esp32", "log-04"] }
+log.workspace = true
+
+# Async runtime
+embassy-executor = { version = "0.10.0", features = ["log"] }
+embassy-time = { version = "0.5.1", features = ["log"] }
+esp-alloc = "0.10.0"
+esp-backtrace = { version = "0.19.0", features = [
+  "esp32",
+  "panic-handler",
+  "println",
+] }
+esp-println = { version = "0.17.0", features = ["esp32", "log-04"] }
+
+critical-section = "1.2.0"
+
+# Embedded utilities
+embedded-hal = "1.0.0"
+embedded-hal-async = "1.0.0"
+embedded-hal-bus = { version = "0.3.0", features = ["async"] }
+
+# BMI160 IMU driver
+bmi160 = "1.1.0"
+
+# WS2812 LED driver
+smart-leds = "0.4.0"
+esp-hal-smartled = { git = "https://github.com/florianL21/esp-hal-community", branch = "main", package = "esp-hal-smartled" }

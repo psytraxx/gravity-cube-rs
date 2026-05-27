@@ -1,0 +1,16 @@
+[package]
+name = "gravity-cube-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "gravity_cube_core"
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+micromath.workspace = true
+log.workspace = true
