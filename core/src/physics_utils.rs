@@ -68,7 +68,12 @@ pub fn apply_axis_boundary(pos: &mut f32, vel: &mut f32, bound: f32, damping: f3
 /// assert_eq!(pos.z, 0.0);  // Clamped
 /// ```
 #[inline]
-pub fn apply_boundary_3d(position: &mut Vector3D, velocity: &mut Vector3D, bound: f32, damping: f32) {
+pub fn apply_boundary_3d(
+    position: &mut Vector3D,
+    velocity: &mut Vector3D,
+    bound: f32,
+    damping: f32,
+) {
     apply_axis_boundary(&mut position.x, &mut velocity.x, bound, damping);
     apply_axis_boundary(&mut position.y, &mut velocity.y, bound, damping);
     apply_axis_boundary(&mut position.z, &mut velocity.z, bound, damping);

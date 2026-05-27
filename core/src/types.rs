@@ -37,7 +37,11 @@ impl Vector3DExt for Vector3D {
                 z: self.z / mag,
             }
         } else {
-            F32x3 { x: 0.0, y: 0.0, z: 0.0 }
+            F32x3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            }
         }
     }
 }
@@ -113,7 +117,11 @@ impl Particle {
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         Self {
             position: Vector3D { x, y, z },
-            velocity: Vector3D { x: 0.0, y: 0.0, z: 0.0 },
+            velocity: Vector3D {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
         }
     }
 

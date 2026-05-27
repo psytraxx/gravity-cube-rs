@@ -57,15 +57,33 @@ const COLLISION_DAMPING: f32 = 0.3;
 
 /// Neighbor offsets for spatial grid lookups (27 neighbors including self).
 const NEIGHBOR_OFFSETS: [(i32, i32, i32); 27] = [
-    (-1, -1, -1), (0, -1, -1), (1, -1, -1),
-    (-1,  0, -1), (0,  0, -1), (1,  0, -1),
-    (-1,  1, -1), (0,  1, -1), (1,  1, -1),
-    (-1, -1,  0), (0, -1,  0), (1, -1,  0),
-    (-1,  0,  0), (0,  0,  0), (1,  0,  0),
-    (-1,  1,  0), (0,  1,  0), (1,  1,  0),
-    (-1, -1,  1), (0, -1,  1), (1, -1,  1),
-    (-1,  0,  1), (0,  0,  1), (1,  0,  1),
-    (-1,  1,  1), (0,  1,  1), (1,  1,  1),
+    (-1, -1, -1),
+    (0, -1, -1),
+    (1, -1, -1),
+    (-1, 0, -1),
+    (0, 0, -1),
+    (1, 0, -1),
+    (-1, 1, -1),
+    (0, 1, -1),
+    (1, 1, -1),
+    (-1, -1, 0),
+    (0, -1, 0),
+    (1, -1, 0),
+    (-1, 0, 0),
+    (0, 0, 0),
+    (1, 0, 0),
+    (-1, 1, 0),
+    (0, 1, 0),
+    (1, 1, 0),
+    (-1, -1, 1),
+    (0, -1, 1),
+    (1, -1, 1),
+    (-1, 0, 1),
+    (0, 0, 1),
+    (1, 0, 1),
+    (-1, 1, 1),
+    (0, 1, 1),
+    (1, 1, 1),
 ];
 
 /// Spatial grid for O(n) average-case collision detection.
@@ -134,7 +152,11 @@ impl SpatialGrid {
             let ny = cy + dy;
             let nz = cz + dz;
             if nx >= 0 && nx < size && ny >= 0 && ny < size && nz >= 0 && nz < size {
-                Some((nx as usize) + (ny as usize) * (size as usize) + (nz as usize) * (size as usize) * (size as usize))
+                Some(
+                    (nx as usize)
+                        + (ny as usize) * (size as usize)
+                        + (nz as usize) * (size as usize) * (size as usize),
+                )
             } else {
                 None
             }
@@ -247,7 +269,12 @@ impl SimulationEffect for FluidSimulation {
             particle.position.z += particle.velocity.z;
 
             // Apply boundary collisions with bounce
-            physics_utils::apply_boundary_3d(&mut particle.position, &mut particle.velocity, bound, damping);
+            physics_utils::apply_boundary_3d(
+                &mut particle.position,
+                &mut particle.velocity,
+                bound,
+                damping,
+            );
 
             // Additional velocity decay
             particle.velocity *= decay;
@@ -301,9 +328,12 @@ impl SimulationEffect for FluidSimulation {
                         self.particles[j].position.z += rz;
 
                         // Average velocities
-                        let avg_vel_x = (self.particles[i].velocity.x + self.particles[j].velocity.x) * 0.5;
-                        let avg_vel_y = (self.particles[i].velocity.y + self.particles[j].velocity.y) * 0.5;
-                        let avg_vel_z = (self.particles[i].velocity.z + self.particles[j].velocity.z) * 0.5;
+                        let avg_vel_x =
+                            (self.particles[i].velocity.x + self.particles[j].velocity.x) * 0.5;
+                        let avg_vel_y =
+                            (self.particles[i].velocity.y + self.particles[j].velocity.y) * 0.5;
+                        let avg_vel_z =
+                            (self.particles[i].velocity.z + self.particles[j].velocity.z) * 0.5;
 
                         self.particles[i].velocity.x = avg_vel_x;
                         self.particles[i].velocity.y = avg_vel_y;
@@ -436,12 +466,12 @@ mod tests {
 
         // Test each direction
         let directions = [
-            Vector3D::new(1.0, 0.0, 0.0),   // +X
-            Vector3D::new(-1.0, 0.0, 0.0),  // -X
-            Vector3D::new(0.0, 1.0, 0.0),   // +Y
-            Vector3D::new(0.0, -1.0, 0.0),  // -Y
-            Vector3D::new(0.0, 0.0, 1.0),   // +Z
-            Vector3D::new(0.0, 0.0, -1.0),  // -Z
+            Vector3D::new(1.0, 0.0, 0.0),  // +X
+            Vector3D::new(-1.0, 0.0, 0.0), // -X
+            Vector3D::new(0.0, 1.0, 0.0),  // +Y
+            Vector3D::new(0.0, -1.0, 0.0), // -Y
+            Vector3D::new(0.0, 0.0, 1.0),  // +Z
+            Vector3D::new(0.0, 0.0, -1.0), // -Z
         ];
 
         for gravity in directions {
@@ -505,8 +535,12 @@ mod tests {
         let final_dx = p2.x - p1.x;
 
         // The separation should have increased
-        assert!(final_dx > initial_dx,
-            "Particles should separate: initial dx={}, final dx={}", initial_dx, final_dx);
+        assert!(
+            final_dx > initial_dx,
+            "Particles should separate: initial dx={}, final dx={}",
+            initial_dx,
+            final_dx
+        );
     }
 
     #[test]
@@ -560,6 +594,9 @@ mod tests {
 
         // Velocity should have decayed
         let final_speed = sim.particles[0].speed();
-        assert!(final_speed < initial_speed, "Velocity should decay over time");
+        assert!(
+            final_speed < initial_speed,
+            "Velocity should decay over time"
+        );
     }
 }

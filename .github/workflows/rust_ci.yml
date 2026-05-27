@@ -13,6 +13,8 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: "sccache"
 
 jobs:
   # Job for Desktop and Core (Stable Toolchain)
@@ -28,8 +30,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libwayland-dev libxkbcommon-dev mesa-common-dev libgl1-mesa-dev pkg-config
 
-      - name: Setup Rust (Stable)
-        uses: dtolnay/rust-toolchain@stable
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.10
 
       - name: Enable caching
         uses: Swatinem/rust-cache@v2
@@ -46,6 +48,10 @@ jobs:
       - name: Clippy (Desktop & Core)
         run: cargo clippy -p gravity-cube-core -p gravity-cube-desktop -- -D warnings
 
+      - name: Run sccache stat for check
+        shell: bash
+        run: ${SCCACHE_PATH} --show-stats
+
   # Job for Firmware (ESP Toolchain)
   firmware:
     name: Firmware
@@ -61,8 +67,8 @@ jobs:
           buildtargets: esp32
           ldproxy: false
 
-      - name: Enable caching
-        uses: Swatinem/rust-cache@v2
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.10
 
       - name: Build Firmware
         # Run inside firmware directory to pick up local .cargo/config.toml
@@ -72,3 +78,7 @@ jobs:
       - name: Clippy Firmware
         working-directory: firmware
         run: cargo clippy --release -- -D warnings
+    
+      - name: Run sccache stat for check
+        shell: bash
+        run: ${SCCACHE_PATH} --show-stats

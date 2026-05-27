@@ -22,7 +22,7 @@ use micromath::F32Ext;
 
 extern crate alloc;
 
-use esp_hal_smartled::{buffer_size_async, SmartLedsAdapterAsync};
+use esp_hal_smartled::{SmartLedsAdapterAsync, buffer_size_async};
 use gravity_cube_core::{Config, Simulation, SimulationEffect, Vector3D, Vector3DExt};
 
 mod adapters;
@@ -187,13 +187,13 @@ async fn main(_spawner: Spawner) -> ! {
         loop_count = loop_count.wrapping_add(1);
         if loop_count.is_multiple_of(100) {
             let active_count = simulation.active_pixels().count();
-            let magnitude = (acceleration.x * acceleration.x 
-                + acceleration.y * acceleration.y 
-                + acceleration.z * acceleration.z).sqrt();
+            let magnitude = (acceleration.x * acceleration.x
+                + acceleration.y * acceleration.y
+                + acceleration.z * acceleration.z)
+                .sqrt();
             info!(
                 "Loop {}: {} particles, accel: ({:.2}, {:.2}, {:.2}) |{:.2}|g",
-                loop_count, active_count, 
-                acceleration.x, acceleration.y, acceleration.z, magnitude
+                loop_count, active_count, acceleration.x, acceleration.y, acceleration.z, magnitude
             );
         }
 

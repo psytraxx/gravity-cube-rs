@@ -30,11 +30,13 @@ where
 
         // Initialize the sensor with default configuration
         // This sets up power modes and enables the accelerometer
-        sensor.set_accel_power_mode(bmi160::AccelerometerPowerMode::Normal)
+        sensor
+            .set_accel_power_mode(bmi160::AccelerometerPowerMode::Normal)
             .map_err(Bmi160Error::Sensor)?;
 
         // Set accelerometer range to ±2g (matches our ACCEL_SCALE constant)
-        sensor.set_accel_range(bmi160::AccelerometerRange::G2)
+        sensor
+            .set_accel_range(bmi160::AccelerometerRange::G2)
             .map_err(Bmi160Error::Sensor)?;
 
         let adapter = Self {
@@ -46,11 +48,11 @@ where
     }
 
     /// Read acceleration vector in g-force units.
-    /// 
+    ///
     /// Returns the actual acceleration including magnitude, not just direction.
     /// At rest, this will return approximately (0, 0, -1) or (0, 0, 1) depending
     /// on orientation (1g from gravity).
-    /// 
+    ///
     /// When the device is shaken or moved, the magnitude will exceed 1g.
     pub fn read_acceleration(&mut self) -> Result<Vector3D, Bmi160Error<E>> {
         // Read accelerometer data
@@ -87,7 +89,7 @@ where
     }
 
     /// Read gravity direction as a normalized unit vector.
-    /// 
+    ///
     /// This discards the acceleration magnitude and only returns direction.
     /// Use `read_acceleration()` if you need the actual acceleration magnitude.
     #[allow(dead_code)]
