@@ -1,0 +1,29 @@
+[package]
+name = "gravity-cube-desktop"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "gravity-cube-desktop"
+path = "src/main.rs"
+
+[dependencies]
+# Core library with std feature enabled
+gravity-cube-core = { workspace = true, features = ["std"] }
+
+# Math (glam for desktop 3D)
+glam = "0.33.0"
+
+# 3D rendering with wgpu
+wgpu = "29.0.3"
+winit = "0.30.12"
+pollster = "0.4.0"
+bytemuck = { version = "1.14", features = ["derive"] }
+
+# Logging
+env_logger = "0.11"
+log.workspace = true
+
+# Random
+rand = "0.10.1"

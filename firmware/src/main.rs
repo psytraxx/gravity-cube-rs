@@ -13,37 +13,23 @@ use esp_hal::clock::CpuClock;
 use esp_hal::delay::Delay;
 use esp_hal::gpio::{Level, OutputConfig};
 use esp_hal::rmt::Rmt;
-use esp_hal::rng::Rng;
 use esp_hal::spi::master::Config as SpiConfig;
 use esp_hal::spi::master::Spi;
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
 use log::{info, warn};
+use micromath::F32Ext;
 
 extern crate alloc;
 
-use esp_hal_smartled::{buffer_size_async, SmartLedsAdapterAsync};
-use firmware::adapters::{Bmi160Adapter, Ws2812Display};
-use firmware::domain::{Color, Config, Simulation, Vector3D};
-use firmware::ports::DisplayPort;
+use esp_hal_smartled::{SmartLedsAdapterAsync, buffer_size_async};
+use gravity_cube_core::{Config, Simulation, SimulationEffect, Vector3D, Vector3DExt};
+
+mod adapters;
+use adapters::{Bmi160Adapter, Ws2812Display};
 
 // This creates a default app-descriptor required by the esp-idf bootloader.
 esp_bootloader_esp_idf::esp_app_desc!();
-
-/// Simple RNG using ESP32 hardware random
-struct SimpleRng {
-    rng: Rng,
-}
-
-impl SimpleRng {
-    fn new() -> Self {
-        Self { rng: Rng::new() }
-    }
-
-    fn next_bool(&self) -> bool {
-        self.rng.random().is_multiple_of(2)
-    }
-}
 
 #[esp_rtos::main]
 async fn main(_spawner: Spawner) -> ! {
@@ -92,10 +78,10 @@ async fn main(_spawner: Spawner) -> ! {
         .expect("Failed to create SPI device");
 
     // Initialize BMI160 IMU
-    let mut imu = match Bmi160Adapter::new(spi_device) {
+    let mut imu_opt = match Bmi160Adapter::new(spi_device) {
         Ok(imu) => {
             info!("  ✓ BMI160 IMU initialized successfully");
-            imu
+            Some(imu)
         }
         Err(_) => {
             warn!("  ✗ Failed to initialize BMI160 IMU");
@@ -104,7 +90,8 @@ async fn main(_spawner: Spawner) -> ! {
             warn!("      MISO → GPIO 19");
             warn!("      SCLK → GPIO 18");
             warn!("      CS   → GPIO 5");
-            panic!("BMI160 initialization failed");
+            warn!("    Continuing with default gravity (pointing down)");
+            None
         }
     };
 
@@ -131,31 +118,22 @@ async fn main(_spawner: Spawner) -> ! {
     // ========================================
     info!("Initializing physics simulation...");
 
-    let sim_config = Config {
-        cube_size: 8,
-        num_particles: 200,
-        velocity: 2.0,
-        delay_ms: 35,
-        color: Color::new(10, 10, 100), // Blue-ish
-    };
+    let sim_config = Config::default();
 
     let mut simulation = Simulation::new(sim_config);
-    simulation.populate_particles(sim_config.num_particles);
+    simulation.populate(sim_config.num_particles);
 
     info!(
         "  • Cube size: {}x{}x{}",
         sim_config.cube_size, sim_config.cube_size, sim_config.cube_size
     );
     info!("  • Active particles: {}", sim_config.num_particles);
-    info!("  • Velocity: {}", sim_config.velocity);
     info!("  • Update rate: {}ms", sim_config.delay_ms);
     info!(
         "  • LED color: RGB({}, {}, {})",
         sim_config.color.r, sim_config.color.g, sim_config.color.b
     );
     info!("");
-
-    let rng = SimpleRng::new();
 
     // Wait for sensors to stabilize
     Timer::after(Duration::from_secs(1)).await;
@@ -170,17 +148,23 @@ async fn main(_spawner: Spawner) -> ! {
     let mut loop_count = 0u32;
 
     loop {
-        // Read gravity from IMU
-        let gravity = match imu.read_gravity() {
-            Ok(g) => g,
-            Err(_) => {
-                warn!("Failed to read IMU, using default gravity");
-                Vector3D::new(0.0, 0.0, -1.0)
+        // Read acceleration from IMU (includes magnitude, not just direction)
+        // This makes particles respond to shaking and sudden movements
+        let acceleration = if let Some(ref mut imu) = imu_opt {
+            match imu.read_acceleration() {
+                Ok(a) => a,
+                Err(_) => {
+                    warn!("Failed to read IMU, using default gravity");
+                    Vector3D::new(0.0, 0.0, -1.0)
+                }
             }
+        } else {
+            // No IMU available, use default gravity
+            Vector3D::new(0.0, 0.0, -1.0)
         };
 
-        // Run physics simulation step
-        simulation.step(&gravity, || rng.next_bool());
+        // Run physics simulation step with actual acceleration
+        simulation.step(&acceleration);
 
         // Clear display
         if let Err(e) = display.clear().await {
@@ -203,9 +187,13 @@ async fn main(_spawner: Spawner) -> ! {
         loop_count = loop_count.wrapping_add(1);
         if loop_count.is_multiple_of(100) {
             let active_count = simulation.active_pixels().count();
+            let magnitude = (acceleration.x * acceleration.x
+                + acceleration.y * acceleration.y
+                + acceleration.z * acceleration.z)
+                .sqrt();
             info!(
-                "Loop {}: {} active particles, gravity: ({:.2}, {:.2}, {:.2})",
-                loop_count, active_count, gravity.x, gravity.y, gravity.z
+                "Loop {}: {} particles, accel: ({:.2}, {:.2}, {:.2}) |{:.2}|g",
+                loop_count, active_count, acceleration.x, acceleration.y, acceleration.z, magnitude
             );
         }
 

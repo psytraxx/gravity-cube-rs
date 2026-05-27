@@ -1,15 +1,16 @@
-[target.xtensa-esp32-none-elf]
-runner = "espflash flash --monitor --chip esp32"
+# Convenience aliases for desktop, core, and firmware
+# Note: Firmware aliases use --manifest-path to pick up the correct toolchain configuration.
 
-[env]
-ESP_LOG="info"
+[alias]
+# Desktop commands
+desktop-build = "build -p gravity-cube-desktop --release"
+desktop-run = "run -p gravity-cube-desktop --release"
+desktop-clippy = "clippy -p gravity-cube-desktop"
 
-[build]
-rustflags = [
-  "-C", "link-arg=-nostartfiles",
-]
+# Core library commands
+core-clippy = "clippy -p gravity-cube-core"
+core-test = "test -p gravity-cube-core -p gravity-cube-desktop"
 
-target = "xtensa-esp32-none-elf"
-
-[unstable]
-build-std = ["alloc", "core"]
+# Firmware commands
+firmware-build = "build --manifest-path firmware/Cargo.toml --release"
+firmware-clippy = "clippy --manifest-path firmware/Cargo.toml"
