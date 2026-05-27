@@ -303,6 +303,20 @@ When writing new tests for physics calculations, use appropriate tolerances (typ
 - Core library is no_std but can enable "std" feature for desktop
 - On Linux with Wayland, use `WINIT_UNIX_BACKEND=x11` for best compatibility
 
+## Code Quality
+
+After every code change, always run clippy and fmt to ensure the code is clean:
+
+```bash
+# Format all crates (desktop + core; skip firmware which needs ESP toolchain)
+cargo fmt -p gravity-cube-core -p gravity-cube-desktop
+
+# Lint desktop and core
+cargo clippy -p gravity-cube-core -p gravity-cube-desktop -- -D warnings
+```
+
+Fix any warnings or formatting issues before considering a task complete.
+
 ## Original Implementation
 
 This project is a Rust port of a fluid cube simulation. The physics algorithm is ported from a C/Arduino implementation with continuous floating-point particle positions, velocity tracking, and collision detection. The Rust version adds:

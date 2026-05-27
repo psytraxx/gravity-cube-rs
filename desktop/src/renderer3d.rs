@@ -4,6 +4,13 @@ use bytemuck::{Pod, Zeroable};
 use gravity_cube_core::{Color, Particle};
 use wgpu::util::DeviceExt;
 
+/// Errors that can occur during rendering.
+#[derive(Debug)]
+pub enum RenderError {
+    /// The surface was lost and needs to be reconfigured.
+    Lost,
+}
+
 // Matrix dimensions
 const MATRIX_WIDTH: usize = 8;
 const MATRIX_HEIGHT: usize = 8;
@@ -96,9 +103,9 @@ impl Renderer3D {
         ];
 
         // Create instance
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
-            ..Default::default()
+            ..wgpu::InstanceDescriptor::new_without_display_handle()
         });
 
         // Create surface
@@ -226,8 +233,8 @@ impl Renderer3D {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[&camera_bind_group_layout],
-                push_constant_ranges: &[],
+                bind_group_layouts: &[Some(&camera_bind_group_layout)],
+                immediate_size: 0,
             });
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -260,8 +267,8 @@ impl Renderer3D {
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Less),
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
@@ -270,7 +277,7 @@ impl Renderer3D {
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
@@ -305,8 +312,8 @@ impl Renderer3D {
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Less),
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
@@ -315,7 +322,7 @@ impl Renderer3D {
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
@@ -494,7 +501,7 @@ impl Renderer3D {
         );
     }
 
-    pub fn render(&mut self, particles: &[Particle]) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self, particles: &[Particle]) -> Result<(), RenderError> {
         // Create instances from particles
         let instances = self.create_instances(particles);
 
@@ -503,7 +510,15 @@ impl Renderer3D {
             .write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&instances));
 
         // Get surface texture
-        let output = self.surface.get_current_texture()?;
+        let output = match self.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(tex)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(tex) => tex,
+            wgpu::CurrentSurfaceTexture::Lost => return Err(RenderError::Lost),
+            wgpu::CurrentSurfaceTexture::Outdated => return Err(RenderError::Lost),
+            wgpu::CurrentSurfaceTexture::Timeout
+            | wgpu::CurrentSurfaceTexture::Occluded
+            | wgpu::CurrentSurfaceTexture::Validation => return Ok(()),
+        };
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
@@ -560,6 +575,7 @@ impl Renderer3D {
                 }),
                 occlusion_query_set: None,
                 timestamp_writes: None,
+                multiview_mask: None,
             });
 
             // Draw voxels

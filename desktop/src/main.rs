@@ -6,7 +6,7 @@ mod renderer3d;
 use cube_transform::CubeTransform;
 use gravity_cube_core::{Config, Simulation, SimulationEffect, Vector3DExt};
 use input::InputHandler;
-use renderer3d::Renderer3D;
+use renderer3d::{RenderError, Renderer3D};
 use std::sync::Arc;
 use winit::{
     application::ApplicationHandler,
@@ -86,7 +86,7 @@ impl State {
         self.simulation.step(&acceleration);
     }
 
-    fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+    fn render(&mut self) -> Result<(), RenderError> {
         self.renderer.render(self.simulation.particles())
     }
 
@@ -179,9 +179,7 @@ impl ApplicationHandler for App {
                     state.update();
                     match state.render() {
                         Ok(_) => {}
-                        Err(wgpu::SurfaceError::Lost) => state.resize(window.inner_size()),
-                        Err(wgpu::SurfaceError::OutOfMemory) => event_loop.exit(),
-                        Err(e) => eprintln!("{:?}", e),
+                        Err(RenderError::Lost) => state.resize(window.inner_size()),
                     }
                 }
                 _ => {}

@@ -31,13 +31,13 @@ gravity-cube-rs/
 │   ├── .cargo/config.toml  # ESP32 target configuration
 │   └── Cargo.toml
 └── desktop/                # Desktop simulator
+    ├── shaders/            # WGSL shaders (vertex, fragment, wireframe)
     ├── src/
     │   ├── main.rs         # Desktop entry point
     │   ├── renderer3d.rs   # GPU-accelerated voxel renderer
     │   ├── camera.rs       # Static perspective camera
     │   ├── cube_transform.rs # Rotation and gravity transform
     │   └── input.rs        # Mouse/keyboard input handling
-    ├── shaders/            # WGSL shaders (vertex, fragment, wireframe)
     └── Cargo.toml
 ```
 
@@ -99,7 +99,7 @@ Interactive 3D visualization with GPU-accelerated rendering and fluid physics.
 
 ### Features
 
-- **GPU Rendering**: wgpu-based instanced voxel rendering with WGSL shaders
+- **GPU Rendering**: wgpu 29-based instanced voxel rendering with WGSL shaders
 - **Multiple Simulation Effects**:
   - FluidSimulation: 256 particles with continuous positions, velocity tracking, and collisions (default)
   - BoidsSimulation: Flocking/swarming behavior with cohesion, separation, and alignment
@@ -111,7 +111,7 @@ Interactive 3D visualization with GPU-accelerated rendering and fluid physics.
 
 - macOS (Apple Silicon or Intel) or Linux
 - Rust stable toolchain
-- GPU with Vulkan/Metal support
+- GPU with Vulkan/Metal/DX12 support
 
 ### Building
 
@@ -309,10 +309,10 @@ The physical LED cube has 6 panels, each with different orientations:
 - **Instanced Voxel Rendering**: Single draw call for all visible voxels
 - **Particle-to-Voxel Conversion**: Continuous positions rounded to discrete grid cells
 - **Instance Data**: Voxel position (x,y,z), HSV-based color with speed brightness
-- **WGSL Shaders**:
-  - Vertex shader: Positions voxel instances with model transformation
-  - Fragment shader: Directional lighting
-  - Wireframe shader: Cube outline
+- **WGSL Shaders** (in `desktop/shaders/`):
+  - `vertex3d.wgsl`: Positions voxel instances with model transformation
+  - `fragment3d.wgsl`: Directional lighting
+  - `wireframe.wgsl`: Cube outline
 - **Depth Buffer**: GPU handles depth sorting automatically
 
 ---
@@ -347,6 +347,20 @@ The core library uses `micromath` for no_std compatibility, which provides fast 
 
 ---
 
+## 🔍 Code Quality
+
+After every code change, run clippy and fmt to keep the code clean:
+
+```bash
+# Format core and desktop (skip firmware — requires ESP toolchain)
+cargo fmt -p gravity-cube-core -p gravity-cube-desktop
+
+# Lint with warnings as errors
+cargo clippy -p gravity-cube-core -p gravity-cube-desktop -- -D warnings
+```
+
+---
+
 ## 📦 Dependencies
 
 ### Shared (Core)
@@ -360,12 +374,13 @@ The core library uses `micromath` for no_std compatibility, which provides fast 
 - `esp-hal-smartled`: WS2812 LED driver (RMT)
 
 ### Desktop
-- `wgpu`: GPU graphics API
-- `winit`: Window and input handling
-- `glam`: 3D math library
+- `wgpu` (v29): GPU graphics API (Metal/Vulkan/DX12)
+- `winit` (v0.30): Window and input handling
+- `glam` (v0.33): 3D math library
 - `pollster`: Async executor for setup
 - `rand`: Random number generation
 - `bytemuck`: Safe GPU buffer casting
+- `log` + `env_logger`: Logging
 
 ---
 
