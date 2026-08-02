@@ -1,3 +1,5 @@
+use glam::camera::rh::proj::directx::perspective;
+use glam::camera::rh::view::look_at_mat4;
 use glam::{Mat4, Vec3};
 
 pub struct Camera {
@@ -28,14 +30,16 @@ impl Camera {
     }
 
     pub fn view_matrix(&self) -> Mat4 {
-        Mat4::look_at_rh(self.position, self.target, self.up)
+        look_at_mat4(self.position, self.target, self.up)
     }
 
     pub fn projection_matrix(&self) -> Mat4 {
-        Mat4::perspective_rh(self.fov, self.aspect, self.near, self.far)
+        // directx: clip-space depth range 0..1, matching wgpu's convention.
+        perspective(self.fov, self.aspect, self.near, self.far)
     }
 
     pub fn view_projection_matrix(&self) -> Mat4 {
         self.projection_matrix() * self.view_matrix()
     }
 }
+
