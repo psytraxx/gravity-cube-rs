@@ -117,6 +117,7 @@ impl Renderer3D {
                 power_preference: wgpu::PowerPreference::default(),
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
+                apply_limit_buckets: false,
             })
             .await
             .unwrap();
@@ -146,6 +147,8 @@ impl Renderer3D {
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
+            // Auto reproduces wgpu's pre-30 color space behaviour.
+            color_space: wgpu::SurfaceColorSpace::Auto,
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::Fifo,
@@ -243,7 +246,7 @@ impl Renderer3D {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"),
-                buffers: &[Vertex::desc(), Instance::desc()],
+                buffers: &[Some(Vertex::desc()), Some(Instance::desc())],
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -288,7 +291,7 @@ impl Renderer3D {
             vertex: wgpu::VertexState {
                 module: &wireframe_shader,
                 entry_point: Some("vs_main"),
-                buffers: &[Vertex::desc()],
+                buffers: &[Some(Vertex::desc())],
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -598,7 +601,8 @@ impl Renderer3D {
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
-        output.present();
+        // wgpu 30 moved presentation from SurfaceTexture onto Queue.
+        self.queue.present(output);
 
         Ok(())
     }
