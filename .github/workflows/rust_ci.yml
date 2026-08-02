@@ -31,7 +31,7 @@ jobs:
           sudo apt-get install -y libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libwayland-dev libxkbcommon-dev mesa-common-dev libgl1-mesa-dev pkg-config
 
       - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.10
+        uses: mozilla-actions/sccache-action@v0.0.11
 
       - name: Enable caching
         uses: Swatinem/rust-cache@v2
@@ -68,7 +68,7 @@ jobs:
           ldproxy: false
 
       - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.10
+        uses: mozilla-actions/sccache-action@v0.0.11
 
       - name: Build Firmware
         # Run inside firmware directory to pick up local .cargo/config.toml
