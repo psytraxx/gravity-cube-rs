@@ -13,17 +13,17 @@ path = "src/main.rs"
 gravity-cube-core = { workspace = true, features = ["std"] }
 
 # Math (glam for desktop 3D)
-glam = "0.33.0"
+glam = "0.34.1"
 
 # 3D rendering with wgpu
-wgpu = "30.0.0"
-winit = "0.30.12"
-pollster = "1.0.0"
-bytemuck = { version = "1.14", features = ["derive"] }
+wgpu = "30.0.1"
+winit = "0.30.13"
+pollster = "1.0.1"
+bytemuck = { version = "1.25.2", features = ["derive"] }
 
 # Logging
-env_logger = "0.11"
+env_logger = "0.11.11"
 log.workspace = true
 
 # Random
-rand = "0.10.1"
+rand = "0.10.3"

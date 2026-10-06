@@ -22,8 +22,9 @@ use micromath::F32Ext;
 
 extern crate alloc;
 
-use esp_hal_smartled::{SmartLedsAdapterAsync, buffer_size_async};
+use esp_hal_smartled::{RmtSmartLeds, WS2812_TIMING, buffer_size, color_order};
 use gravity_cube_core::{Config, Simulation, SimulationEffect, Vector3D, Vector3DExt};
+use smart_leds::RGB8;
 
 mod adapters;
 use adapters::{Bmi160Adapter, Ws2812Display};
@@ -41,9 +42,7 @@ async fn main(_spawner: Spawner) -> ! {
     esp_alloc::heap_allocator!(#[unsafe(link_section = ".dram2_uninit")] size: 98767);
 
     let timg0 = TimerGroup::new(peripherals.TIMG0);
-    let sw_interrupt =
-        esp_hal::interrupt::software::SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
-    esp_rtos::start(timg0.timer0, sw_interrupt.software_interrupt0);
+    esp_rtos::start(timg0.timer0, peripherals.FROM_CPU_INTR0);
 
     info!("╔═══════════════════════════════════════╗");
     info!("║   Gravity Cube - Rust Edition v0.1   ║");
@@ -97,14 +96,20 @@ async fn main(_spawner: Spawner) -> ! {
 
     // Initialize RMT for WS2812 LEDs
     info!("  • Setting up RMT for WS2812 LEDs...");
-    let rmt = Rmt::new(peripherals.RMT, Rate::from_mhz(80))
+    let rmt_freq = Rate::from_mhz(80);
+    let rmt = Rmt::new(peripherals.RMT, rmt_freq)
         .expect("Failed to create RMT")
         .into_async();
 
     // Create RMT channel for WS2812 on GPIO 16
     // Buffer size for 384 LEDs
-    let mut rmt_buffer = [esp_hal::rmt::PulseCode::default(); buffer_size_async(384)];
-    let led_driver = SmartLedsAdapterAsync::new(rmt.channel0, peripherals.GPIO16, &mut rmt_buffer);
+    let led_driver = RmtSmartLeds::<{ buffer_size::<RGB8>(384) }, _, RGB8, color_order::Grb>::new(
+        WS2812_TIMING,
+        rmt.channel0,
+        peripherals.GPIO16,
+        rmt_freq,
+    )
+    .expect("Failed to create LED driver");
 
     let mut display = Ws2812Display::new(led_driver, 384);
     info!("  ✓ WS2812 LED driver initialized (384 LEDs on GPIO 16)");

@@ -42,4 +42,3 @@ impl Camera {
         self.projection_matrix() * self.view_matrix()
     }
 }
-

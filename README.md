@@ -99,7 +99,7 @@ Interactive 3D visualization with GPU-accelerated rendering and fluid physics.
 
 ### Features
 
-- **GPU Rendering**: wgpu 29-based instanced voxel rendering with WGSL shaders
+- **GPU Rendering**: wgpu 30-based instanced voxel rendering with WGSL shaders
 - **Multiple Simulation Effects**:
   - FluidSimulation: 256 particles with continuous positions, velocity tracking, and collisions (default)
   - BoidsSimulation: Flocking/swarming behavior with cohesion, separation, and alignment
@@ -210,6 +210,9 @@ cargo install espflash
 ### Building
 
 ```bash
+# Make sure the Xtensa toolchain (incl. xtensa-esp32-elf-gcc linker) is on PATH
+. $HOME/export-esp.sh
+
 # Navigate to firmware directory
 cd firmware
 
@@ -374,9 +377,9 @@ cargo clippy -p gravity-cube-core -p gravity-cube-desktop -- -D warnings
 - `esp-hal-smartled`: WS2812 LED driver (RMT)
 
 ### Desktop
-- `wgpu` (v29): GPU graphics API (Metal/Vulkan/DX12)
+- `wgpu` (v30): GPU graphics API (Metal/Vulkan/DX12)
 - `winit` (v0.30): Window and input handling
-- `glam` (v0.33): 3D math library
+- `glam` (v0.34): 3D math library
 - `pollster`: Async executor for setup
 - `rand`: Random number generation
 - `bytemuck`: Safe GPU buffer casting
