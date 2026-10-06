@@ -45,7 +45,7 @@ gravity-cube-rs/
 
 ## Architecture
 
-Both versions follow **Hexagonal Architecture** (Ports and Adapters pattern):
+Both versions follow **Hexagonal Architecture** (Ports and Adapters pattern): the core crate defines the domain and platform adapters feed it gravity and render its particles:
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -78,17 +78,16 @@ Both versions follow **Hexagonal Architecture** (Ports and Adapters pattern):
                   │
          ┌────────┴─────────┐
          │                  │
-    ┌────┴────┐        ┌────┴────┐
-    │  Ports  │        │ Adapters│
-    │(Traits) │        │ (Impls) │
-    └─────────┘        └─────────┘
-         │                  │
-    ┌────┴────┐        ┌────┴────┐
-    │ ImuPort │◄───────┤ BMI160  │ (firmware)
-    │         │◄───────┤ Camera  │ (desktop)
-    │DisplayP.│◄───────┤ WS2812  │ (firmware)
-    │         │◄───────┤  WGPU   │ (desktop)
-    └─────────┘        └─────────┘
+    ┌────┴─────┐      ┌─────┴────┐
+    │ Firmware │      │ Desktop  │
+    │ adapters │      │ adapters │
+    ├──────────┤      ├──────────┤
+    │ BMI160   │      │ Mouse/   │
+    │ (gravity)│      │ keyboard │
+    │ WS2812   │      │ (gravity)│
+    │ (LEDs)   │      │ wgpu     │
+    │          │      │ renderer │
+    └──────────┘      └──────────┘
 ```
 
 ---
@@ -100,9 +99,7 @@ Interactive 3D visualization with GPU-accelerated rendering and fluid physics.
 ### Features
 
 - **GPU Rendering**: wgpu 30-based instanced voxel rendering with WGSL shaders
-- **Multiple Simulation Effects**:
-  - FluidSimulation: 256 particles with continuous positions, velocity tracking, and collisions (default)
-  - BoidsSimulation: Flocking/swarming behavior with cohesion, separation, and alignment
+- **Fluid Simulation**: 256 particles with continuous positions, velocity tracking, and collisions
 - **Interactive Gravity**: Rotate cube with mouse/keyboard to change gravity direction
 - **Real-time Updates**: Physics runs every frame (~60 FPS) for smooth animation
 - **Visual Feedback**: Speed-based brightness using HSV color system
@@ -129,8 +126,6 @@ cargo run -p gravity-cube-desktop --release
 # Linux (use X11 backend for best compatibility)
 WINIT_UNIX_BACKEND=x11 cargo run -p gravity-cube-desktop --release
 
-# Or use convenience script
-./run-desktop.sh
 ```
 
 ### Controls
@@ -143,26 +138,18 @@ The cube rotates based on your input, and world gravity (always pointing down) i
 
 ### Configuration
 
-Edit `desktop/src/main.rs` to adjust simulation parameters:
+The desktop uses `Config::default()` (see `core/src/types.rs`):
 
 ```rust
-let config = Config {
+Config {
     cube_size: 8,
-    num_particles: 256,          // 256 particles for full water pool effect
-    velocity: 2.0,               // Legacy field (unused by fluid sim)
-    delay_ms: 35,                // Frame delay (firmware only, desktop updates every frame)
-    color: Color::new(100, 180, 255),  // Cyan for water appearance
-
-    // Fluid physics parameters
-    gravity: 0.08,               // Gravity strength multiplier
-    damping: 0.92,               // Velocity reduction on boundary bounce
-    max_velocity: 0.6,           // Maximum velocity clamp
-    velocity_smoothing: 0.9,     // Acceleration integration smoothing
-    velocity_decay: 0.95,        // Per-frame velocity decay (friction)
-    collision_repulsion: 0.5,    // Particle separation force
-    collision_damping: 0.3,      // Collision velocity dampening
-};
+    num_particles: 256,
+    delay_ms: 35,                // Firmware frame delay (desktop updates every frame)
+    color: Color::DEFAULT,
+}
 ```
+
+The physics tuning constants (gravity, damping, max velocity, smoothing, decay, collision repulsion/damping) are compile-time constants at the top of `core/src/effects/fluid.rs`.
 
 ---
 
@@ -232,26 +219,9 @@ espflash flash --monitor target/xtensa-esp32-none-elf/release/firmware
 
 ### Configuration
 
-Edit `firmware/src/main.rs` to adjust simulation parameters:
+The firmware also uses `Config::default()` in `firmware/src/main.rs` (8×8×8 cube, 256 particles, 35ms frame delay, ~28 FPS). Override fields there if the ESP32 can't keep up, e.g. lower `num_particles`.
 
-```rust
-let config = Config {
-    cube_size: 8,
-    num_particles: 128,          // Reduced for ESP32 performance
-    velocity: 2.0,               // Legacy field (unused by fluid sim)
-    delay_ms: 35,                // Frame delay (35ms = ~28 FPS)
-    color: Color::new(10, 10, 100),  // Blue
-
-    // Fluid physics parameters (same values as desktop)
-    gravity: 0.08,
-    damping: 0.92,
-    max_velocity: 0.6,
-    velocity_smoothing: 0.9,
-    velocity_decay: 0.95,
-    collision_repulsion: 0.5,
-    collision_damping: 0.3,
-};
-```
+The physics tuning constants (gravity, damping, max velocity, smoothing, decay, collision repulsion/damping) are compile-time constants at the top of `core/src/effects/fluid.rs`.
 
 ### Troubleshooting
 
@@ -276,7 +246,7 @@ If LEDs don't light:
    - Desktop: World gravity transformed to cube's local coordinate system based on rotation
 
 2. **Particle System**:
-   - 256 particles (desktop) or 128 particles (firmware)
+   - 256 particles by default (`Config::default()`)
    - Each particle has continuous f32 position (x, y, z) and velocity (vx, vy, vz) vectors
    - Particles initialized in bottom half of cube (like water filling halfway)
 
