@@ -19,6 +19,7 @@ and the edges glow too.
 | `part_slide_switch_ss12f15.stl` | – | Reference model only (not printed) |
 | `assembly_preview.stl` | – | All six shells assembled, for checking fit |
 | `generate.py` | – | Parametric source; rebuilds every STL |
+| `viewer.html` | – | Interactive 3D viewer of the STLs (explode, translucent, port close-up) |
 
 **Material:** translucent or clear resin (SLA) for all six shells. Sand or
 bead-blast the outside for an even frosted diffusion.
@@ -59,6 +60,18 @@ before ordering.
    and both port pockets open into it.
 4. Put dowels in the mitre holes and close the cube. Glue the last face, or
    leave it dry-fitted so the cube can be opened again.
+
+## Viewing
+
+Browsers won't load local STL files from `file://`, so serve the folder:
+
+```bash
+cd case/voxel-shell && python3 -m http.server 8000
+# open http://localhost:8000/viewer.html
+```
+
+`../concepts.html` compares the five frame concepts considered (Edge Rails,
+Corner Bumpers, Lantern Cage, Pinwheel, Voxel Shell) and opens directly.
 
 ## Rebuilding
 

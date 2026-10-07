@@ -1,0 +1,611 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gravity Cube Frames</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..800&family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@400;600&display=swap">
+<style>
+/* Layout: one big studio viewport on the left, a spec sheet for the selected concept on the right; concept tabs above. */
+:root {
+  --bg: #eef0f2;
+  --surface: #ffffff;
+  --fg: #1b1f24;
+  --muted: #5d6670;
+  --line: #d5dae0;
+  --accent: #2f8fd8;
+  --studio: #15181c;
+  --studio-fg: #c9d1da;
+  --good: #2e8b57;
+  --warn: #b5631c;
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111418; --surface: #1a1e23; --fg: #e4e8ec; --muted: #94a0ab; --line: #2c333b;
+    --accent: #5aaee8; --studio: #0b0d10; --studio-fg: #c9d1da; --good: #5cbf86; --warn: #e0954f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111418; --surface: #1a1e23; --fg: #e4e8ec; --muted: #94a0ab; --line: #2c333b;
+  --accent: #5aaee8; --studio: #0b0d10; --studio-fg: #c9d1da; --good: #5cbf86; --warn: #e0954f;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 48px; display: grid; gap: 20px; }
+header { display: grid; gap: 6px; }
+h1 { font-family: var(--font-display); font-stretch: 112%; font-weight: 800; font-size: clamp(26px, 4vw, 40px); line-height: 1.05; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+.lede { color: var(--muted); max-width: 70ch; margin: 0; }
+.lede b { color: var(--fg); font-weight: 600; }
+.tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.tab { font: 600 14px/1 var(--font-body); padding: 10px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; display: inline-flex; gap: 8px; align-items: baseline; }
+.tab .k { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-weight: 400; }
+.tab[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.tab[aria-selected="true"] .k { color: var(--bg); opacity: .7; }
+.tab:focus-visible, .sw:focus-visible, .tog:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start; }
+@media (max-width: 900px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.stage { position: relative; background: var(--studio); border-radius: 10px; overflow: hidden; aspect-ratio: 4 / 3; max-width: 100%; touch-action: none; cursor: grab; }
+.stage:active { cursor: grabbing; }
+.stage canvas { display: block; width: 100%; height: 100%; }
+.hud { position: absolute; left: 14px; right: 14px; bottom: 12px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font: 12px/1.3 var(--font-mono); color: var(--studio-fg); pointer-events: none; }
+.hud .dim { opacity: .65; }
+.controls { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; flex-wrap: wrap; gap: 6px; justify-content: space-between; }
+.group { display: flex; gap: 6px; align-items: center; background: rgba(0,0,0,.35); padding: 5px 7px; border-radius: 6px; }
+.group span { font: 11px var(--font-mono); color: var(--studio-fg); text-transform: uppercase; letter-spacing: .08em; margin-right: 2px; }
+.sw { width: 20px; height: 20px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
+.sw[aria-pressed="true"] { border-color: #fff; }
+.tog { font: 12px var(--font-mono); color: var(--studio-fg); background: transparent; border: 1px solid rgba(255,255,255,.25); border-radius: 4px; padding: 3px 8px; cursor: pointer; }
+.tog[aria-pressed="true"] { background: rgba(255,255,255,.15); color: #fff; }
+.sheet { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: grid; gap: 14px; min-width: 0; }
+.sheet h2 { font-family: var(--font-display); font-stretch: 105%; font-size: 24px; margin: 0; line-height: 1.1; }
+.sheet .tag { font: 12px var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.sheet p { margin: 0; }
+dl.specs { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; padding-block: 12px; border-block: 1px solid var(--line); }
+dl.specs dt { font: 12px var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; padding-top: 2px; }
+dl.specs dd { margin: 0; font-variant-numeric: tabular-nums; }
+.pc { display: grid; gap: 6px; }
+.pc h3 { font: 600 12px var(--font-mono); text-transform: uppercase; letter-spacing: .08em; margin: 0; }
+.pc ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; }
+.pc.pro h3 { color: var(--good); }
+.pc.con h3 { color: var(--warn); }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.fact { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 4px; }
+.fact .n { font: 500 20px var(--font-mono); font-variant-numeric: tabular-nums; }
+.fact .l { color: var(--muted); font-size: 14px; }
+.section-h { font: 600 12px var(--font-mono); text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin: 8px 0 -6px; }
+.compare { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 14px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+th { font: 600 12px var(--font-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+td:first-child { font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { .tab { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Gravity Cube frame concepts</h1>
+    <p class="lede">Five frame designs for six <b>65 × 65 mm WS2812 8×8 panels</b> together as a cube. Each one is drawn to scale in millimetres. Drag to turn the cube. The lit "water" always settles toward the bottom, just like the running simulation. The bottom front edge has the USB-C port and power switch.</p>
+  </header>
+
+  <div class="facts">
+    <div class="fact"><span class="n">1.56 mm</span><span class="l">Gap between the PCB edge and the outer LED rows. Any front lip must stay under this, so these concepts use 1.2 mm.</span></div>
+    <div class="fact"><span class="n">1.6 × 1.6 mm</span><span class="l">Open notch along every cube edge when six square boards sit around a 65 mm core.</span></div>
+    <div class="fact"><span class="n">8.125 mm</span><span class="l">LED pitch (65 / 8). Every millimetre of frame at an edge widens the gap between the pixels on either side of that edge.</span></div>
+  </div>
+
+  <div class="tabs" role="tablist" id="tabs"></div>
+
+  <div class="main">
+    <div class="stage" id="stage">
+      <div class="controls">
+        <div class="group" role="group" aria-label="Frame material">
+          <span>Material</span>
+          <button class="tog mat" data-m="resinBlack" aria-pressed="true">Resin black</button>
+          <button class="tog mat" data-m="resinWhite" aria-pressed="false">Resin white</button>
+          <button class="tog mat" data-m="nylon" aria-pressed="false">Nylon</button>
+          <button class="tog mat" data-m="tpu" aria-pressed="false">TPU</button>
+          <button class="tog mat" data-m="alu" aria-pressed="false">Aluminium</button>
+        </div>
+        <div class="group">
+          <button class="tog" id="tog-led" aria-pressed="true">LEDs on</button>
+          <button class="tog" id="tog-spin" aria-pressed="true">Auto-turn</button>
+          <button class="tog" id="tog-port" aria-pressed="false">Port close-up</button>
+        </div>
+      </div>
+      <div class="hud"><span id="hud-name">—</span><span class="dim" id="hud-size">—</span></div>
+    </div>
+
+    <aside class="sheet" id="sheet" aria-live="polite"></aside>
+  </div>
+
+  <p class="section-h">USB-C port and power switch</p>
+  <div class="facts">
+    <div class="fact"><span class="n">Where</span><span class="l">The six panels close the cube on every side, so the port can't go through a face. Each concept puts a USB-C socket (about 9 × 3.3 mm) and a small slide switch in a frame "pod" on the bottom front edge, drawn in the viewer.</span></div>
+    <div class="fact"><span class="n">Wiring in</span><span class="l">Four thin wires (28–30 AWG: 5 V, GND, and the battery through the switch) run from the pod through one of the panel's roughly 2 mm mounting holes. The ESP32 and battery can go in later without touching the frame.</span></div>
+    <div class="fact"><span class="n">Alternative</span><span class="l">In the Lantern Cage, the panels can sit 3.5 mm off the core. That opens a channel under every rail, so the socket board fits inside the rail and no holes are needed.</span></div>
+  </div>
+
+  <p class="section-h">Materials, from your print service list</p>
+  <div class="compare">
+    <table>
+      <thead><tr><th>Material</th><th>Verdict</th><th>Best for</th><th>Why</th></tr></thead>
+      <tbody id="mats"></tbody>
+    </table>
+  </div>
+
+  <p class="section-h">Side by side</p>
+  <div class="compare">
+    <table>
+      <thead><tr><th>Concept</th><th>Outer size</th><th>Printed parts</th><th>Covers LEDs?</th><th>Drop protection</th><th>Print effort</th><th>Material</th></tr></thead>
+      <tbody id="cmp"></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+  // ---------- Panel facts (mm) ----------
+  const S = 65, T = 1.6, H = S / 2, PITCH = S / 8, LIP = 1.2;
+
+  const CONCEPTS = [
+    { id: 'rails', name: 'Edge Rails', key: 'A',
+      tag: '12 slim L-rails',
+      mat: 'Resin', port: 'Bulged pod on the bottom front rail, 26 mm long', size: '69.8 mm', parts: '12 rails (1 with port pod) + 8 inner corner blocks', covers: 'No (1.2 mm lip)', drop: 'Light', effort: 'Low',
+      desc: 'A chamfered rail runs along every edge. It fills the 1.6 mm notch and laps 1.2 mm over each panel, which still clears the outer LEDs. Panels are glued or taped to small printed corner blocks inside.',
+      pros: ['Barely larger than the bare panels', 'Clean, square cube edges', 'Easy to print: 12 identical straight rails'],
+      cons: ['A thin 1.2 mm lip needs a good printer', 'Corners only as tough as the PLA rail'] },
+    { id: 'corners', name: 'Corner Bumpers', key: 'B',
+      tag: '8 three-arm corners',
+      mat: 'Nylon or TPU', port: 'One bottom corner has a longer arm that holds the port and switch', size: '74 mm at corners, 68.2 mm across faces', parts: '8 corners (1 with port arm) + 8 inner corner blocks', covers: 'No', drop: 'Good on corners', effort: 'Low',
+      desc: 'Protective corners like a flight case. Each one has three short arms that lap the panel edges and stand 2.9 mm proud, so the cube lands on its bumpers when you set it down. The middle of each edge shows the bare PCB.',
+      pros: ['Protects the corners, which are what usually hit a table', 'Shows the most PCB, so it looks technical', 'Only one printed part design, used 8 times'],
+      cons: ['Mid-edges are unsupported, so you rely on the strong PCB and glue', 'Bumpers cast small shadows on the corner LEDs at steep angles'] },
+    { id: 'cage', name: 'Lantern Cage', key: 'C',
+      tag: '12 chunky rails, recessed panels',
+      mat: 'Nylon or Aluminium', port: 'Built into the bottom front rail, which is already wide enough', size: '77 mm', parts: '12 rails + 8 corner nodes', covers: 'No (panels sit 4.4 mm deep)', drop: 'Best', effort: 'Medium',
+      desc: 'Heavy bevelled rails stand 4.4 mm proud of the faces, so the panels sit recessed inside a cage. Nothing touches the LEDs if you put it face-down or drop it. It reads as a solid object, not as electronics.',
+      pros: ['Toughest option, and nice to hold and tilt', 'Rails can hide screws or magnets', 'Strong outline even with the LEDs off'],
+      cons: ['Largest frame-only option', 'Rails block edge pixels at shallow viewing angles'] },
+    { id: 'pinwheel', name: 'Pinwheel (no frame)', key: 'D',
+      tag: 'Panels interlock, nothing outside',
+      mat: 'Resin', port: 'Small pod glued along the bottom front edge, the only part on the outside', size: '66.6 mm', parts: '8 small inner corner brackets + 1 port pod', covers: 'No', drop: 'Poor', effort: 'Minimal',
+      desc: 'Uses the PCBs as the enclosure. Each panel butts edge-to-back against its neighbour in a rotating pattern, so all twelve edges close with six identical boards. Small printed brackets and epoxy inside hold the joints.',
+      pros: ['Smallest possible cube', 'Pixels on either side of an edge stay closest together', 'Almost nothing to print'],
+      cons: ['Bare FR4 edges and corners are visible', 'Hard to take apart after gluing', 'Sharp corners if dropped'] },
+    { id: 'shell', name: 'Voxel Shell', key: 'E',
+      tag: 'Grid + diffuser on every face',
+      mat: 'Resin (black grid, translucent diffuser)', port: 'In the hollow 8 mm border of the front shell; no pod needed', size: '≈ 82 mm', parts: '6 face shells (mitred) + 6 diffusers', covers: 'Yes, diffused', drop: 'Good', effort: 'High',
+      desc: 'Each face gets an 8 × 8 light grid, notched around the capacitors, topped by a 2 mm opal diffuser. The six shells meet at 45° mitres and clamp the panels. Every LED turns into a solid square pixel.',
+      pros: ['Reads as true voxels, with no visible LED dots', 'Hides all the electronics', 'Protects the LEDs completely'],
+      cons: ['Biggest and slowest to print (384 small grid cells)', 'Thick walls at the edges make the gaps between pixels there largest', 'Diffuser costs some brightness'] },
+  ];
+
+  const MATS = [
+    ['Resin', 'Recommended', 'Edge Rails, Pinwheel, Voxel Shell grids', 'Finest detail, so the 1.2 mm lip and chamfers come out crisp. A little brittle, and some resins yellow in sunlight.'],
+    ['Nylon (PA12)', 'Recommended', 'Lantern Cage, Corner Bumpers', 'Tough and slightly flexible, so it survives drops. Matte finish, can be dyed black. Walls of about 1 mm or more are fine.'],
+    ['TPU', 'Good', 'Corner Bumpers', 'Soft, rubbery corners that grip the table and absorb knocks. Too floppy for long rails.'],
+    ['PC', 'OK', 'Lantern Cage', 'Very tough, but needs a high-temperature printer and gains little over nylon here.'],
+    ['PETG / ASA / ABS', 'OK', 'Lantern Cage, inner corner blocks', 'Cheap FDM plastics. The 1.2 mm lip and chamfers show layer steps, so use them on the chunkier designs.'],
+    ['PLA', 'Prototype only', 'Fit tests', 'Cheap and fine for checking fit. Softens at about 55 °C, and a cube full of LEDs gets warm.'],
+    ['Aluminium', 'Premium option', 'Lantern Cage', 'CNC metal looks and feels great. It conducts, so it must be anodised or insulated where it touches the PCB edges. Costly.'],
+    ['PEEK / PPS', 'Skip', '—', 'Engineering plastics for heat and chemicals. They cost a lot and add nothing here.'],
+    ['Stainless / Titanium / Tool steel', 'Skip', '—', 'Heavy, conductive and expensive for a tilting toy.'],
+  ];
+  const MAT_LOOK = {
+    resinBlack: { color: 0x1c1d21, roughness: 0.35, metalness: 0 },
+    resinWhite: { color: 0xeceae4, roughness: 0.4, metalness: 0 },
+    nylon: { color: 0x2b2c2f, roughness: 0.97, metalness: 0 },
+    tpu: { color: 0x26272a, roughness: 0.85, metalness: 0 },
+    alu: { color: 0xb4b8be, roughness: 0.32, metalness: 0.85 },
+  };
+
+  // ---------- three.js scene ----------
+  const stage = document.getElementById('stage');
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  stage.prepend(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x15181c);
+  const camera = new THREE.PerspectiveCamera(30, 4 / 3, 1, 2000);
+  camera.position.set(0, 45, 265);
+  camera.lookAt(0, 0, 0);
+
+  scene.add(new THREE.HemisphereLight(0xdfe8f2, 0x23262b, 0.75));
+  const key = new THREE.DirectionalLight(0xffffff, 0.85); key.position.set(120, 180, 160); scene.add(key);
+  const rim = new THREE.DirectionalLight(0x9fc6ff, 0.35); rim.position.set(-160, 60, -120); scene.add(rim);
+
+  // floor shadow disc
+  const shadowTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const g = c.getContext('2d'); const gr = g.createRadialGradient(64, 64, 4, 64, 64, 64);
+    gr.addColorStop(0, 'rgba(0,0,0,0.55)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c);
+  })();
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(170, 170), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false }));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = -62; scene.add(floor);
+
+  const glowTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d'); const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,0.45)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c);
+  })();
+
+  const cube = new THREE.Group();
+  scene.add(cube);
+
+  const frameMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0x1c1d21).convertSRGBToLinear(), roughness: 0.35, metalness: 0.0 });
+  const pcbMat = new THREE.MeshStandardMaterial({ color: 0x15171a, roughness: 0.55, metalness: 0.1 });
+  const coreMat = new THREE.MeshStandardMaterial({ color: 0x0c0d0f, roughness: 1 });
+  const pkgMat = new THREE.MeshStandardMaterial({ color: 0xe6e2da, roughness: 0.5 });
+  const capMat = new THREE.MeshStandardMaterial({ color: 0x6b5a45, roughness: 0.6 });
+
+  const AX = ['x', 'y', 'z'];
+  const unit = (i, s = 1) => { const v = new THREE.Vector3(); v.setComponent(i, s); return v; };
+
+  // ---------- Panels ----------
+  // A panel: normal axis a, sign sg, in-plane axes u,v, centre (local), extent 65 x 65 x 1.6
+  function standardPanels() {
+    const out = [];
+    for (let a = 0; a < 3; a++) for (const sg of [1, -1]) {
+      const c = unit(a, sg * (H + T / 2));
+      out.push({ a, sg, center: c });
+    }
+    return out;
+  }
+  // Pinwheel: brute-force shifts so every edge and corner of the 66.6 mm cube is covered exactly once.
+  function pinwheelPanels() {
+    const h = (S + T) / 2;
+    const faces = [];
+    for (let a = 0; a < 3; a++) for (const sg of [1, -1]) faces.push({ a, sg, ip: [0, 1, 2].filter(i => i !== a) });
+    for (let mask = 0; mask < 4096; mask++) {
+      const shift = (f, b) => { const fi = faces.indexOf(f); const k = f.ip.indexOf(b); return (mask >> (fi * 2 + k)) & 1 ? 1 : -1; };
+      // opposite faces should be point-symmetric so the result looks balanced; not required, just check coverage
+      let ok = true;
+      // edges
+      for (const f of faces) for (const g of faces) {
+        if (f.a >= g.a) continue;
+        const cf = shift(f, g.a) === g.sg, cg = shift(g, f.a) === f.sg;
+        if (cf === cg) { ok = false; break; }
+      }
+      if (!ok) continue;
+      // corners
+      for (const sx of [1, -1]) for (const sy of [1, -1]) for (const sz of [1, -1]) {
+        const s = [sx, sy, sz]; let n = 0;
+        for (const f of faces) {
+          if (f.sg !== s[f.a]) continue;
+          if (f.ip.every(b => shift(f, b) === s[b])) n++;
+        }
+        if (n !== 1) ok = false;
+      }
+      if (!ok) continue;
+      return faces.map(f => {
+        const c = unit(f.a, f.sg * (h - T / 2));
+        f.ip.forEach(b => c.setComponent(b, shift(f, b) * T / 2));
+        return { a: f.a, sg: f.sg, center: c };
+      });
+    }
+    return standardPanels();
+  }
+
+  function inPlane(a) { return [0, 1, 2].filter(i => i !== a); }
+
+  // ---------- Geometry helpers ----------
+  function boxBetween(min, max, mat) {
+    const size = new THREE.Vector3().subVectors(max, min);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z), mat);
+    m.position.addVectors(min, max).multiplyScalar(0.5);
+    return m;
+  }
+  // Bar along axis e, cross-section in axes (p,q) from inner..outer on the sign side, with a chamfer on the outer corner.
+  function chamferBar(e, p, sp, q, sq, inner, outer, from, to, chamfer, mat) {
+    const w = outer - inner, sh = new THREE.Shape();
+    sh.moveTo(0, 0); sh.lineTo(w, 0); sh.lineTo(w, w - chamfer); sh.lineTo(w - chamfer, w); sh.lineTo(0, w); sh.closePath();
+    const g = new THREE.ExtrudeGeometry(sh, { depth: to - from, bevelEnabled: false });
+    // local: shape x -> p, shape y -> q, extrude z -> e
+    const m = new THREE.Matrix4();
+    const ex = unit(p, sp), ey = unit(q, sq), ez = unit(e, 1);
+    m.makeBasis(ex, ey, ez);
+    m.setPosition(unit(p, sp * inner).add(unit(q, sq * inner)).add(unit(e, from)));
+    g.applyMatrix4(m);
+    // fix winding when basis is mirrored
+    if (new THREE.Matrix3().setFromMatrix4(m).determinant() < 0) {
+      const idx = g.index; if (!idx) { const pos = g.attributes.position; for (let i = 0; i < pos.count; i += 3) { const ax = pos.getX(i), ay = pos.getY(i), az = pos.getZ(i); pos.setXYZ(i, pos.getX(i + 1), pos.getY(i + 1), pos.getZ(i + 1)); pos.setXYZ(i + 1, ax, ay, az); } }
+    }
+    g.computeVertexNormals();
+    return new THREE.Mesh(g, mat);
+  }
+  function edges() {
+    const out = [];
+    for (let e = 0; e < 3; e++) { const [p, q] = inPlane(e); for (const sp of [1, -1]) for (const sq of [1, -1]) out.push({ e, p, sp, q, sq }); }
+    return out;
+  }
+
+  // ---------- LED instancing ----------
+  const pkgGeo = new THREE.BoxGeometry(5, 5, 1.4);
+  const lensGeo = new THREE.CircleGeometry(1.9, 20);
+  const capGeo = new THREE.BoxGeometry(1.6, 0.8, 0.8);
+  const glowGeo = new THREE.PlaneGeometry(13, 13);
+  const cellGeo = new THREE.PlaneGeometry(7.2, 7.2);
+
+  let pixels = []; // {pos: Vector3 (local, for gravity), idx}
+  let lensMesh, glowMesh, cellMesh;
+  const dummy = new THREE.Object3D();
+
+  function faceBasis(a, sg) {
+    const n = unit(a, sg);
+    const [u, v] = inPlane(a);
+    const U = unit(u, 1), V = unit(v, 1);
+    // orient object +z along normal
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), n);
+    return { n, U, V, q };
+  }
+
+  function build(id) {
+    while (cube.children.length) { const c = cube.children.pop(); c.geometry && c.geometry.dispose(); }
+    pixels = [];
+    const panels = id === 'pinwheel' ? pinwheelPanels() : standardPanels();
+    const shell = id === 'shell';
+
+    if (id !== 'pinwheel') cube.add(new THREE.Mesh(new THREE.BoxGeometry(S - 0.2, S - 0.2, S - 0.2), coreMat));
+
+    const N = panels.length * 64;
+    const pkgInst = new THREE.InstancedMesh(pkgGeo, pkgMat, N);
+    const capInst = new THREE.InstancedMesh(capGeo, capMat, N);
+    lensMesh = new THREE.InstancedMesh(lensGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }), N);
+    glowMesh = new THREE.InstancedMesh(glowGeo, new THREE.MeshBasicMaterial({ map: glowTex, color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }), N);
+    cellMesh = null;
+    let k = 0;
+
+    for (const P of panels) {
+      const { n, U, V, q } = faceBasis(P.a, P.sg);
+      // board
+      const dims = new THREE.Vector3(S, S, S); dims.setComponent(P.a, T);
+      const board = new THREE.Mesh(new THREE.BoxGeometry(dims.x, dims.y, dims.z), pcbMat);
+      board.position.copy(P.center); cube.add(board);
+      const front = P.center.clone().addScaledVector(n, T / 2);
+      for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) {
+        const cu = (i + 0.5) * PITCH - H, cv = (j + 0.5) * PITCH - H;
+        const base = front.clone().addScaledVector(U, cu).addScaledVector(V, cv);
+        dummy.quaternion.copy(q);
+        dummy.position.copy(base).addScaledVector(n, 0.7); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); pkgInst.setMatrixAt(k, dummy.matrix);
+        dummy.position.copy(base).addScaledVector(n, 1.42); dummy.updateMatrix(); lensMesh.setMatrixAt(k, dummy.matrix);
+        dummy.position.copy(base).addScaledVector(n, 1.6); dummy.updateMatrix(); glowMesh.setMatrixAt(k, dummy.matrix);
+        dummy.position.copy(base).addScaledVector(V, -3.3).addScaledVector(U, 1.4).addScaledVector(n, 0.4); dummy.updateMatrix(); capInst.setMatrixAt(k, dummy.matrix);
+        pixels.push({ pos: base.clone() });
+        k++;
+      }
+    }
+    pkgInst.instanceMatrix.needsUpdate = true; capInst.instanceMatrix.needsUpdate = true;
+    lensMesh.instanceMatrix.needsUpdate = true; glowMesh.instanceMatrix.needsUpdate = true;
+
+    if (!shell) { cube.add(pkgInst, capInst, lensMesh, glowMesh); }
+
+    const outerFace = H + T; // 34.1
+    if (id === 'rails') {
+      const inner = H - LIP, outer = outerFace + 0.8;
+      for (const E of edges()) cube.add(chamferBar(E.e, E.p, E.sp, E.q, E.sq, inner, outer, -outer, outer, 1.0, frameMat));
+    }
+    if (id === 'corners') {
+      const inner = H - LIP, outer = outerFace + 2.9, arm = 15;
+      for (const E of edges()) for (const end of [1, -1]) {
+        const from = end > 0 ? outer - arm : -outer, to = end > 0 ? outer : -outer + arm;
+        cube.add(chamferBar(E.e, E.p, E.sp, E.q, E.sq, inner, outer, from, to, 1.6, frameMat));
+      }
+    }
+    if (id === 'cage') {
+      const inner = H - LIP, outer = outerFace + 4.4;
+      for (const E of edges()) cube.add(chamferBar(E.e, E.p, E.sp, E.q, E.sq, inner, outer, -outer, outer, 2.6, frameMat));
+    }
+    if (id === 'shell') {
+      const depth = 7, out = outerFace + depth; // ~41.1 -> ~82 mm cube
+      for (let a = 0; a < 3; a++) for (const sg of [1, -1]) {
+        const min = new THREE.Vector3(-out, -out, -out), max = new THREE.Vector3(out, out, out);
+        if (sg > 0) min.setComponent(a, outerFace); else max.setComponent(a, -outerFace);
+        cube.add(boxBetween(min, max, frameMat));
+      }
+      cellMesh = new THREE.InstancedMesh(cellGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }), N);
+      let c = 0;
+      for (const P of panels) {
+        const { n, U, V, q } = faceBasis(P.a, P.sg);
+        const front = unit(P.a, P.sg * (out + 0.05));
+        for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) {
+          const cu = (i + 0.5) * PITCH - H, cv = (j + 0.5) * PITCH - H;
+          dummy.quaternion.copy(q);
+          dummy.position.copy(front).addScaledVector(U, cu).addScaledVector(V, cv); dummy.scale.set(1, 1, 1); dummy.updateMatrix();
+          cellMesh.setMatrixAt(c++, dummy.matrix);
+        }
+      }
+      cellMesh.instanceMatrix.needsUpdate = true;
+      cube.add(cellMesh);
+    }
+    addPorts(id);
+  }
+
+  // USB-C + slide switch on the bottom-front edge (edge along x at y = -, z = +)
+  const holeMat = new THREE.MeshBasicMaterial({ color: 0x050506 });
+  const metalMat = new THREE.MeshStandardMaterial({ color: 0xb9bcc0, metalness: 0.9, roughness: 0.3 });
+  const knobMat = new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.6 });
+  function roundedRect(w, h, r) {
+    const s = new THREE.Shape(), x = -w / 2, y = -h / 2;
+    s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r);
+    s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r);
+    s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y); return s;
+  }
+  function addPorts(id) {
+    const inner = H - LIP;
+    let face, cy, x0, x1;   // face: z of the front face of the pod; cy: y centre of openings
+    if (id === 'rails' || id === 'pinwheel') {
+      const o = 38.5; x0 = -13; x1 = 13;
+      cube.add(chamferBar(0, 1, -1, 2, 1, id === 'pinwheel' ? H : inner, o, x0, x1, 2.6, frameMat));
+      face = o; cy = -(inner + o - 2.6) / 2;
+    } else if (id === 'corners') {
+      const o = H + T + 2.9; x0 = 4; x1 = o;
+      cube.add(chamferBar(0, 1, -1, 2, 1, inner, o, x0, x1, 1.6, frameMat));
+      face = o; cy = -(inner + o - 1.6) / 2;
+    } else if (id === 'cage') {
+      const o = H + T + 4.4; x0 = -13; x1 = 13;
+      face = o; cy = -(inner + o - 2.6) / 2;
+    } else { // shell
+      face = H + T + 7; x0 = -13; x1 = 13; cy = -(H + 4.3);
+    }
+    const mid = (x0 + x1) / 2;
+    const usbX = mid - 4.5, swX = mid + 6.5;
+    const slot = new THREE.Mesh(new THREE.ShapeGeometry(roundedRect(9.2, 3.4, 1.6)), holeMat);
+    slot.position.set(usbX, cy, face + 0.04); cube.add(slot);
+    const tongue = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.7, 0.1), metalMat);
+    tongue.position.set(usbX, cy, face + 0.06); cube.add(tongue);
+    const sw = new THREE.Mesh(new THREE.ShapeGeometry(roundedRect(6, 2.2, 0.4)), holeMat);
+    sw.position.set(swX, cy, face + 0.04); cube.add(sw);
+    const knob = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.5, 1.4), knobMat);
+    knob.position.set(swX - 1.2, cy, face + 0.7); cube.add(knob);
+  }
+
+  // ---------- Fluid-ish lighting ----------
+  const WATER = new THREE.Color(100 / 255, 180 / 255, 255 / 255);
+  const OFF_LENS = new THREE.Color(0xd8d3ca), OFF_CELL = new THREE.Color(0xdedbd4), DARK = new THREE.Color(0, 0, 0);
+  let ledsOn = true;
+  const tmpC = new THREE.Color(), gLocal = new THREE.Vector3(), invQ = new THREE.Quaternion();
+  function updateLeds(t) {
+    invQ.copy(cube.quaternion).invert();
+    gLocal.set(0, -1, 0).applyQuaternion(invQ);
+    const level = H * 0.15;
+    for (let k = 0; k < pixels.length; k++) {
+      const p = pixels[k].pos;
+      const depth = p.dot(gLocal); // larger = lower
+      const ripple = Math.sin(p.x * 0.18 + t * 1.7) * 2.2 + Math.cos(p.z * 0.21 - t * 1.3) * 2.0;
+      const d = depth - level + ripple;
+      let b = ledsOn ? Math.max(0, Math.min(1, d / 10 + 0.15)) : 0;
+      if (d < 0) b = 0;
+      // surface sparkle: brighter near the surface (faster particles)
+      const sp = d > 0 && d < 6 ? 0.35 : 0;
+      const bright = Math.min(1, b * 0.75 + sp);
+      if (cellMesh) {
+        tmpC.copy(OFF_CELL).multiplyScalar(0.55).lerp(WATER, bright > 0 ? 0.35 + bright * 0.65 : 0);
+        if (bright > 0) tmpC.multiplyScalar(0.6 + bright * 0.7);
+        cellMesh.setColorAt(k, tmpC);
+      } else {
+        if (bright > 0) tmpC.copy(WATER).multiplyScalar(0.5 + bright * 0.7); else tmpC.copy(OFF_LENS).multiplyScalar(0.8);
+        lensMesh.setColorAt(k, tmpC);
+        tmpC.copy(WATER).multiplyScalar(bright * 0.55);
+        glowMesh.setColorAt(k, bright > 0 ? tmpC : DARK);
+      }
+    }
+    if (cellMesh) cellMesh.instanceColor.needsUpdate = true;
+    else { lensMesh.instanceColor.needsUpdate = true; glowMesh.instanceColor.needsUpdate = true; }
+  }
+
+  // ---------- Interaction ----------
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let spin = !reduced;
+  cube.quaternion.setFromEuler(new THREE.Euler(0.42, -0.62, 0.1));
+  let dragging = false, lx = 0, ly = 0, lastInteract = -1e9;
+  const el = renderer.domElement;
+  el.addEventListener('pointerdown', e => { dragging = true; lx = e.clientX; ly = e.clientY; el.setPointerCapture(e.pointerId); });
+  el.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    const dx = e.clientX - lx, dy = e.clientY - ly; lx = e.clientX; ly = e.clientY;
+    const qy = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), dx * 0.008);
+    const qx = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), dy * 0.008);
+    cube.quaternion.premultiply(qy).premultiply(qx);
+    lastInteract = performance.now();
+  });
+  const end = () => { dragging = false; };
+  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false); camera.aspect = w / h;
+    camera.fov = w < 520 ? 38 : 30; camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stage); resize();
+
+  let t0 = performance.now();
+  function frame(now) {
+    const t = (now - t0) / 1000;
+    if (spin && !dragging && now - lastInteract > 2500) {
+      cube.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.0045));
+      cube.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0.3).normalize(), Math.sin(t * 0.5) * 0.0018));
+    }
+    updateLeds(reduced ? 0 : t);
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- UI ----------
+  const tabs = document.getElementById('tabs'), sheet = document.getElementById('sheet');
+  const hudName = document.getElementById('hud-name'), hudSize = document.getElementById('hud-size');
+  function select(id) {
+    const c = CONCEPTS.find(x => x.id === id) || CONCEPTS[0];
+    [...tabs.children].forEach(b => b.setAttribute('aria-selected', String(b.dataset.id === c.id)));
+    build(c.id);
+    hudName.textContent = `${c.key} · ${c.name}`;
+    hudSize.textContent = `outer ${c.size}`;
+    sheet.innerHTML = `
+      <span class="tag">Concept ${c.key} · ${c.tag}</span>
+      <h2>${c.name}</h2>
+      <p>${c.desc}</p>
+      <dl class="specs">
+        <dt>Outer</dt><dd>${c.size}</dd>
+        <dt>Parts</dt><dd>${c.parts}</dd>
+        <dt>Covers LEDs</dt><dd>${c.covers}</dd>
+        <dt>Drops</dt><dd>${c.drop}</dd>
+        <dt>Print effort</dt><dd>${c.effort}</dd>
+        <dt>Material</dt><dd>${c.mat}</dd>
+        <dt>USB + switch</dt><dd>${c.port}</dd>
+      </dl>
+      <div class="pc pro"><h3>Good</h3><ul>${c.pros.map(p => `<li>${p}</li>`).join('')}</ul></div>
+      <div class="pc con"><h3>Watch out</h3><ul>${c.cons.map(p => `<li>${p}</li>`).join('')}</ul></div>`;
+    try { localStorage.setItem('gc-concept', c.id); } catch (e) {}
+  }
+  CONCEPTS.forEach(c => {
+    const b = document.createElement('button');
+    b.className = 'tab'; b.role = 'tab'; b.dataset.id = c.id;
+    b.innerHTML = `<span class="k">${c.key}</span>${c.name}`;
+    b.addEventListener('click', () => select(c.id));
+    tabs.appendChild(b);
+  });
+  document.getElementById('cmp').innerHTML = CONCEPTS.map(c =>
+    `<tr><td>${c.key} · ${c.name}</td><td>${c.size}</td><td>${c.parts}</td><td>${c.covers}</td><td>${c.drop}</td><td>${c.effort}</td><td>${c.mat}</td></tr>`).join('');
+  document.getElementById('mats').innerHTML = MATS.map(m =>
+    `<tr><td>${m[0]}</td><td>${m[1]}</td><td>${m[2]}</td><td>${m[3]}</td></tr>`).join('');
+
+  document.querySelectorAll('.mat').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.mat').forEach(x => x.setAttribute('aria-pressed', 'false'));
+    b.setAttribute('aria-pressed', 'true');
+    const L = MAT_LOOK[b.dataset.m]; frameMat.color.setHex(L.color).convertSRGBToLinear(); frameMat.roughness = L.roughness; frameMat.metalness = L.metalness;
+  }));
+  const togLed = document.getElementById('tog-led'), togSpin = document.getElementById('tog-spin');
+  togLed.addEventListener('click', () => { ledsOn = !ledsOn; togLed.setAttribute('aria-pressed', String(ledsOn)); });
+  togSpin.setAttribute('aria-pressed', String(spin));
+  togSpin.addEventListener('click', () => { spin = !spin; togSpin.setAttribute('aria-pressed', String(spin)); });
+  const togPort = document.getElementById('tog-port');
+  let portView = false; const homeQ = cube.quaternion.clone();
+  function setPortView(on) {
+    portView = on; togPort.setAttribute('aria-pressed', String(on));
+    if (on) {
+      spin = false; togSpin.setAttribute('aria-pressed', 'false');
+      cube.quaternion.setFromEuler(new THREE.Euler(-0.3, 0.4, 0));
+      camera.position.set(0, -4, 205); camera.lookAt(0, -14, 10);
+    } else {
+      camera.position.set(0, 45, 265); camera.lookAt(0, 0, 0);
+    }
+  }
+  togPort.addEventListener('click', () => setPortView(!portView));
+
+  let start = 'rails';
+  const hash = location.hash.slice(1);
+  if (CONCEPTS.some(c => c.id === hash)) start = hash;
+  else { try { const s = localStorage.getItem('gc-concept'); if (s && CONCEPTS.some(c => c.id === s)) start = s; } catch (e) {} }
+  select(start);
+  requestAnimationFrame(frame);
+})();
+</script>
