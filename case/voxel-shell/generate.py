@@ -1,0 +1,270 @@
+#!/usr/bin/env python3
+"""Voxel Shell enclosure for the 8x8x8 Gravity Cube.
+
+Six identical face shells with 45 degree mitred edges hold six 65 x 66 mm
+WS2812 8x8 panels. Each shell is one translucent part: a pocket for the PCB,
+an 8x8 light grid and a closed diffuser skin on the front. Two variants carry
+a USB-C socket and a slide switch on the bottom front edge.
+
+Coordinates: mm, cube centred on the origin. A shell is modelled with its
+face normal along +Z; the front (diffuser) face is at z = OUTER.
+
+    pip install manifold3d trimesh numpy
+    python3 generate.py            # writes the STL files next to this script
+"""
+
+import math
+import os
+
+import numpy as np
+import trimesh
+from manifold3d import Manifold
+
+# ---------------------------------------------------------------- panel
+# The boards are 65 x 66 mm. In shell coordinates the 65 mm side runs along X
+# and the 66 mm side along Y. The 8x8 LED grid (8.125 mm pitch, outer LEDs
+# 1.56 mm from the 65 mm edges) is assumed centred, so the 66 mm direction
+# has 0.5 mm extra margin on each side.
+PANEL_X = 65.0  # PCB width
+PANEL_Y = 66.0  # PCB length
+PCB_T = 1.6  # PCB thickness
+GRID_SPAN = 65.0  # LED grid span: 8 x pitch
+PITCH = GRID_SPAN / 8  # LED pitch, 8.125
+EDGE_MARGIN = 1.56  # 65 mm edge to the outer LED rows
+
+# ---------------------------------------------------------------- shell
+FIT = 0.25  # clearance around the PCB in its pocket (resin prints vary by ~0.1-0.2)
+PANEL_GAP = 1.5  # gap between the back of a panel and its neighbour's edge
+RELIEF = 1.3  # grid walls stop this far above the PCB (clears the capacitors)
+GRID_DEPTH = 7.5  # PCB front to diffuser skin (deep enough for the USB-C socket)
+SKIN = 1.2  # diffuser skin thickness
+WALL = 1.6  # grid wall thickness
+CLAMP_RING = 0.6  # width of the ring that presses on the PCB margin
+
+H = GRID_SPAN / 2  # half of the LED grid (32.5)
+HX, HY = PANEL_X / 2, PANEL_Y / 2  # PCB half sizes (32.5, 33.0)
+HMAX = max(HX, HY)  # clearances use the long side, so a panel can face either way
+Z_BACK = HMAX + PANEL_GAP  # back of the PCB / back of the shell (34.5)
+Z_PCB = Z_BACK + PCB_T  # front of the PCB (36.1)
+Z_GRID = Z_PCB + RELIEF  # bottom of the grid walls
+Z_SKIN = Z_PCB + GRID_DEPTH  # back of the diffuser skin
+OUTER = Z_SKIN + SKIN  # front face (44.8 -> 89.6 mm cube)
+
+# ---------------------------------------------------------------- pins
+PIN_D = 2.1  # for 2 mm dowels or 1.75 mm filament
+PIN_DEPTH = 4.0
+PIN_ALONG = 25.0  # pin positions along each edge: +-PIN_ALONG
+PIN_AT = 38.0  # where the pin axis meets the mitre (x = z = PIN_AT)
+
+# ---------------------------------------------------------------- USB-C + switch (cube coordinates; front = +Z, bottom = -Y)
+# Both sit in the border of the front face along the bottom edge.
+#
+# USB-C: snap-in socket with flying leads. Flange 15.8 x 9.3 x 2.0, body 9.0
+# deep behind it. The flange stays on the outside; the body goes through a
+# cut-out in a 1.6 mm wall (like the thin panel the socket is made for) and its
+# snap wings open into the wider pocket behind it.
+USB_FLANGE = (15.8, 9.3, 2.0)
+USB_BODY_DEPTH = 9.0
+USB_CUTOUT = (14.6, 8.2)  # check against your socket's body; flange laps 0.6 mm
+USB_WALL = 1.6
+USB_X = -10.0  # socket centre along the edge
+# Slide switch: SS12F15-style, plate 19.6 x 5.5 with M2 holes 11.5 apart,
+# 7.8 mm from the plate to the pin tips, 3 mm lever travel.
+SW_PLATE = (19.6, 5.5)
+SW_DEPTH = 7.8
+SW_HOLE_PITCH = 11.5
+SW_SCREW_D = 2.2  # M2 screws through the wall (set 0 to glue instead)
+SW_SLOT = (6.6, 3.4)  # lever opening: 3 mm travel + lever + clearance
+SW_WALL = 1.2
+SW_X = 10.5
+PART_FIT = 0.2  # clearance per side
+PORT_FLOOR = 1.2  # wall left above the bottom face
+PORT_TOP = -(HMAX + FIT + 0.6)  # keep clear of the front panel pocket
+WIRE_Z = HMAX + 0.3  # wire channels stop here, just in front of the bottom panel edge
+
+SEG = 48
+
+
+def box(x0, x1, y0, y1, z0, z1):
+    return Manifold.cube([x1 - x0, y1 - y0, z1 - z0]).translate([x0, y0, z0])
+
+
+def rounded_slot(w, h, depth):
+    """Stadium-shaped prism, centred in XY, extruded along +Z from 0 to depth."""
+    r = h / 2
+    c = Manifold.cylinder(depth, r, r, SEG)
+    return Manifold.batch_hull([c.translate([-(w / 2 - r), 0, 0]), c.translate([w / 2 - r, 0, 0])])
+
+
+def frustum():
+    """Mitred slab: |x| <= z and |y| <= z for Z_BACK <= z <= OUTER."""
+    pts = []
+    for z in (Z_BACK, OUTER):
+        for sx in (-1, 1):
+            for sy in (-1, 1):
+                pts.append([sx * z, sy * z, z])
+    return Manifold.hull_points(np.array(pts))
+
+
+def pin_holes():
+    holes = []
+    for along in (-PIN_ALONG, PIN_ALONG):
+        # hole along +Z, then tilt 45 deg so it is normal to the x = z mitre
+        h = Manifold.cylinder(PIN_DEPTH * 2, PIN_D / 2, PIN_D / 2, SEG, True)
+        h = h.rotate([0, -45, 0]).translate([PIN_AT, along, PIN_AT])
+        for k in range(4):
+            holes.append(h.rotate([0, 0, 90 * k]))
+    return sum_all(holes)
+
+
+def sum_all(parts):
+    out = parts[0]
+    for p in parts[1:]:
+        out = out + p
+    return out
+
+
+def face_shell():
+    s = frustum()
+    ax, ay = HX + FIT, HY + FIT
+    # PCB pocket
+    s = s - box(-ax, ax, -ay, ay, Z_BACK - 1, Z_PCB)
+    # relief over the LEDs and capacitors, leaving a ring on the PCB margin
+    rx, ry = HX - CLAMP_RING, HY - CLAMP_RING
+    s = s - box(-rx, rx, -ry, ry, Z_PCB - 0.01, Z_GRID)
+    # 8 x 8 light cells
+    half = (PITCH - WALL) / 2
+    cells = []
+    for i in range(8):
+        for j in range(8):
+            cx = (i + 0.5) * PITCH - H
+            cy = (j + 0.5) * PITCH - H
+            cells.append(box(cx - half, cx + half, cy - half, cy + half, Z_GRID - 0.01, Z_SKIN))
+    s = s - sum_all(cells)
+    s = s - pin_holes()
+    return s
+
+
+def port_band():
+    y0 = -OUTER + PORT_FLOOR
+    return y0, PORT_TOP, (y0 + PORT_TOP) / 2
+
+
+def port_cut():
+    """USB-C socket + slide switch cavities in cube coordinates."""
+    y0, y1, yc = port_band()
+    f = PART_FIT
+    # USB-C: cut-out through the wall, wider pocket behind for body and snap wings
+    cw, ch = USB_CUTOUT
+    cut = box(USB_X - cw / 2, USB_X + cw / 2, yc - ch / 2, yc + ch / 2, OUTER - USB_WALL - 1, OUTER + 1)
+    pw = USB_FLANGE[0] + 2 * f
+    usb_back = OUTER - USB_WALL - USB_BODY_DEPTH + USB_FLANGE[2] - 0.5
+    cut = cut + box(USB_X - pw / 2, USB_X + pw / 2, y0, y1, usb_back, OUTER - USB_WALL)
+    # switch: plate sits against the inside of a thin wall, lever through a slot
+    sw, sh = SW_PLATE[0] + 2 * f, SW_PLATE[1] + 2 * f
+    plate = OUTER - SW_WALL
+    sw_back = plate - SW_DEPTH - 0.4
+    cut = cut + box(SW_X - sw / 2, SW_X + sw / 2, yc - sh / 2, yc + sh / 2, sw_back, plate)
+    cut = cut + box(SW_X - SW_SLOT[0] / 2, SW_X + SW_SLOT[0] / 2,
+                    yc - SW_SLOT[1] / 2, yc + SW_SLOT[1] / 2, plate - 1, OUTER + 1)
+    if SW_SCREW_D:
+        for dx in (-SW_HOLE_PITCH / 2, SW_HOLE_PITCH / 2):
+            cut = cut + Manifold.cylinder(SW_WALL + 2, SW_SCREW_D / 2, SW_SCREW_D / 2, SEG).translate(
+                [SW_X + dx, yc, plate - 1])
+    # wire channels from both parts into the open edge channel / cube interior
+    for x0, x1, zb in ((USB_X - 5, USB_X + 5, usb_back), (SW_X - 3, SW_X + 3, sw_back)):
+        cut = cut + box(x0, x1, y0 + 1.5, -HMAX, WIRE_Z, zb + 0.01)
+    return cut
+
+
+def usb_socket_model():
+    """Reference model of the USB-C socket, placed in cube coordinates."""
+    _, _, yc = port_band()
+    fw, fh, ft = USB_FLANGE
+    flange = box(USB_X - fw / 2, USB_X + fw / 2, yc - fh / 2, yc + fh / 2, OUTER, OUTER + ft)
+    bw, bh = USB_CUTOUT[0] - 0.4, USB_CUTOUT[1] - 0.4
+    body = box(USB_X - bw / 2, USB_X + bw / 2, yc - bh / 2, yc + bh / 2, OUTER + ft - USB_BODY_DEPTH - ft, OUTER)
+    mouth = rounded_slot(8.4, 2.6, 7.0).translate([USB_X, yc, OUTER + ft - 7.0 + 0.01])
+    return flange + body - mouth
+
+
+def switch_model():
+    """Reference model of the SS12F15 slide switch, placed in cube coordinates."""
+    _, _, yc = port_band()
+    plate_z = OUTER - SW_WALL
+    pw, ph = SW_PLATE
+    plate = box(SW_X - pw / 2, SW_X + pw / 2, yc - ph / 2, yc + ph / 2, plate_z - 0.5, plate_z)
+    for dx in (-SW_HOLE_PITCH / 2, SW_HOLE_PITCH / 2):
+        plate = plate - Manifold.cylinder(2, 1.0, 1.0, SEG).translate([SW_X + dx, yc, plate_z - 1])
+    body = box(SW_X - 4.3, SW_X + 4.3, yc - 1.8, yc + 1.8, plate_z - 5.5, plate_z - 0.5)
+    pins = sum_all([box(SW_X + dx - 0.4, SW_X + dx + 0.4, yc - 0.25, yc + 0.25, plate_z - SW_DEPTH, plate_z - 5.5)
+                    for dx in (-3, 0, 3)])
+    lever = box(SW_X - 1.5 - 1.2, SW_X - 1.5 + 1.2, yc - 1.0, yc + 1.0, plate_z, OUTER + 2.5)
+    return plate + body + pins + lever
+
+
+FIT_TEST_HEIGHT = 2.0  # grid wall height kept in the fit-test piece
+
+
+def fit_test():
+    """Thin slice of a shell: pocket, rim and the bottom of the grid, no skin.
+
+    Cheap to print. Press a real panel in: if it seats flat and no LED touches
+    a wall, the full shells fit.
+    """
+    return face_shell() ^ box(-OUTER, OUTER, -OUTER, OUTER, Z_BACK - 1, Z_GRID + FIT_TEST_HEIGHT)
+
+
+# face placements: rotation (degrees, applied to a +Z shell) for each cube face
+FACES = {
+    "front": [0, 0, 0],  # +Z
+    "back": [180, 0, 0],  # -Z
+    "top": [-90, 0, 0],  # +Y
+    "bottom": [90, 0, 0],  # -Y
+    "right": [0, 90, 0],  # +X
+    "left": [0, -90, 0],  # -X
+}
+
+
+def unplace(m, rot):
+    """Inverse of Manifold.rotate(rot) for the single-axis rotations above."""
+    return m.rotate([-a for a in rot])
+
+
+def to_trimesh(m):
+    mesh = m.to_mesh()
+    t = trimesh.Trimesh(vertices=np.asarray(mesh.vert_properties)[:, :3], faces=np.asarray(mesh.tri_verts))
+    return t
+
+
+def main():
+    out = os.path.dirname(os.path.abspath(__file__))
+    shell = face_shell()
+    cut = port_cut()
+
+    parts = {"shell.stl": shell, "fit_test.stl": fit_test()}
+    placed = {}
+    for name, rot in FACES.items():
+        p = shell.rotate(rot)
+        if name in ("front", "bottom"):
+            p = p - cut
+            parts[f"shell_port_{name}.stl"] = unplace(p, rot)
+        placed[name] = p
+
+    for fname, m in parts.items():
+        t = to_trimesh(m)
+        t.export(os.path.join(out, fname))
+        print(f"{fname:24s} watertight={t.is_watertight} volume={t.volume / 1000:.1f} cm3 "
+              f"bbox={np.round(t.extents, 2)}")
+
+    for fname, m in (("part_usb_c_socket.stl", usb_socket_model()), ("part_slide_switch_ss12f15.stl", switch_model())):
+        to_trimesh(m).export(os.path.join(out, fname))
+        print(f"{fname:24s} (reference only, placed in cube coordinates)")
+    cube = sum_all(list(placed.values()))
+    t = to_trimesh(cube)
+    t.export(os.path.join(out, "assembly_preview.stl"))
+    print(f"assembly_preview.stl     edge={t.extents[0]:.1f} mm  (outer cube {2 * OUTER:.1f} mm)")
+
+
+if __name__ == "__main__":
+    main()
