@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Voxel Shell enclosure for the 8x8x8 Gravity Cube.
 
-Six identical face shells with 45 degree mitred edges hold six 65 x 65 mm
+Six identical face shells with 45 degree mitred edges hold six 65 x 66 mm
 WS2812 8x8 panels. Each shell is one translucent part: a pocket for the PCB,
 an 8x8 light grid and a closed diffuser skin on the front. Two variants carry
 a USB-C socket and a slide switch on the bottom front edge.
@@ -21,26 +21,34 @@ import trimesh
 from manifold3d import Manifold
 
 # ---------------------------------------------------------------- panel
-PANEL = 65.0  # PCB edge length
+# The boards are 65 x 66 mm. In shell coordinates the 65 mm side runs along X
+# and the 66 mm side along Y. The 8x8 LED grid (8.125 mm pitch, outer LEDs
+# 1.56 mm from the 65 mm edges) is assumed centred, so the 66 mm direction
+# has 0.5 mm extra margin on each side.
+PANEL_X = 65.0  # PCB width
+PANEL_Y = 66.0  # PCB length
 PCB_T = 1.6  # PCB thickness
-PITCH = PANEL / 8  # LED pitch, 8.125
-EDGE_MARGIN = 1.56  # PCB edge to the outer LED rows
+GRID_SPAN = 65.0  # LED grid span: 8 x pitch
+PITCH = GRID_SPAN / 8  # LED pitch, 8.125
+EDGE_MARGIN = 1.56  # 65 mm edge to the outer LED rows
 
 # ---------------------------------------------------------------- shell
-FIT = 0.15  # clearance around the PCB in its pocket
+FIT = 0.25  # clearance around the PCB in its pocket (resin prints vary by ~0.1-0.2)
 PANEL_GAP = 1.5  # gap between the back of a panel and its neighbour's edge
 RELIEF = 1.3  # grid walls stop this far above the PCB (clears the capacitors)
 GRID_DEPTH = 7.5  # PCB front to diffuser skin (deep enough for the USB-C socket)
 SKIN = 1.2  # diffuser skin thickness
 WALL = 1.6  # grid wall thickness
-CLAMP_RING = 0.75  # width of the ring that presses on the PCB margin
+CLAMP_RING = 0.6  # width of the ring that presses on the PCB margin
 
-H = PANEL / 2
-Z_BACK = H + PANEL_GAP  # back of the PCB / back of the shell (34.0)
-Z_PCB = Z_BACK + PCB_T  # front of the PCB (35.6)
+H = GRID_SPAN / 2  # half of the LED grid (32.5)
+HX, HY = PANEL_X / 2, PANEL_Y / 2  # PCB half sizes (32.5, 33.0)
+HMAX = max(HX, HY)  # clearances use the long side, so a panel can face either way
+Z_BACK = HMAX + PANEL_GAP  # back of the PCB / back of the shell (34.5)
+Z_PCB = Z_BACK + PCB_T  # front of the PCB (36.1)
 Z_GRID = Z_PCB + RELIEF  # bottom of the grid walls
 Z_SKIN = Z_PCB + GRID_DEPTH  # back of the diffuser skin
-OUTER = Z_SKIN + SKIN  # front face (44.3 -> 88.6 mm cube)
+OUTER = Z_SKIN + SKIN  # front face (44.8 -> 89.6 mm cube)
 
 # ---------------------------------------------------------------- pins
 PIN_D = 2.1  # for 2 mm dowels or 1.75 mm filament
@@ -71,8 +79,8 @@ SW_WALL = 1.2
 SW_X = 10.5
 PART_FIT = 0.2  # clearance per side
 PORT_FLOOR = 1.2  # wall left above the bottom face
-PORT_TOP = -(H + 0.9)  # keep clear of the front panel pocket
-WIRE_Z = H + 0.3  # wire channels stop here, just in front of the bottom panel edge
+PORT_TOP = -(HMAX + FIT + 0.6)  # keep clear of the front panel pocket
+WIRE_Z = HMAX + 0.3  # wire channels stop here, just in front of the bottom panel edge
 
 SEG = 48
 
@@ -118,12 +126,12 @@ def sum_all(parts):
 
 def face_shell():
     s = frustum()
-    a = H + FIT
+    ax, ay = HX + FIT, HY + FIT
     # PCB pocket
-    s = s - box(-a, a, -a, a, Z_BACK - 1, Z_PCB)
+    s = s - box(-ax, ax, -ay, ay, Z_BACK - 1, Z_PCB)
     # relief over the LEDs and capacitors, leaving a ring on the PCB margin
-    r = H - CLAMP_RING
-    s = s - box(-r, r, -r, r, Z_PCB - 0.01, Z_GRID)
+    rx, ry = HX - CLAMP_RING, HY - CLAMP_RING
+    s = s - box(-rx, rx, -ry, ry, Z_PCB - 0.01, Z_GRID)
     # 8 x 8 light cells
     half = (PITCH - WALL) / 2
     cells = []
@@ -165,7 +173,7 @@ def port_cut():
                 [SW_X + dx, yc, plate - 1])
     # wire channels from both parts into the open edge channel / cube interior
     for x0, x1, zb in ((USB_X - 5, USB_X + 5, usb_back), (SW_X - 3, SW_X + 3, sw_back)):
-        cut = cut + box(x0, x1, y0 + 1.5, -H + 0.5, WIRE_Z, zb + 0.01)
+        cut = cut + box(x0, x1, y0 + 1.5, -HMAX, WIRE_Z, zb + 0.01)
     return cut
 
 
@@ -195,6 +203,18 @@ def switch_model():
     return plate + body + pins + lever
 
 
+FIT_TEST_HEIGHT = 2.0  # grid wall height kept in the fit-test piece
+
+
+def fit_test():
+    """Thin slice of a shell: pocket, rim and the bottom of the grid, no skin.
+
+    Cheap to print. Press a real panel in: if it seats flat and no LED touches
+    a wall, the full shells fit.
+    """
+    return face_shell() ^ box(-OUTER, OUTER, -OUTER, OUTER, Z_BACK - 1, Z_GRID + FIT_TEST_HEIGHT)
+
+
 # face placements: rotation (degrees, applied to a +Z shell) for each cube face
 FACES = {
     "front": [0, 0, 0],  # +Z
@@ -222,7 +242,7 @@ def main():
     shell = face_shell()
     cut = port_cut()
 
-    parts = {"shell.stl": shell}
+    parts = {"shell.stl": shell, "fit_test.stl": fit_test()}
     placed = {}
     for name, rot in FACES.items():
         p = shell.rotate(rot)

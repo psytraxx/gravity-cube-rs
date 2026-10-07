@@ -51,7 +51,7 @@ code { font-family: var(--font-mono); font-size: 13px; }
 <div class="wrap">
   <header>
     <h1>Voxel Shell</h1>
-    <p class="lede">This shows the actual STL files: six mitred face shells in translucent resin, each holding one 65 mm WS2812 panel. Drag to turn the cube and use the slider to pull it apart. The orange USB-C socket and green slide switch sit on the bottom front edge.</p>
+    <p class="lede">This shows the actual STL files: six mitred face shells in translucent resin, each holding one 65 × 66 mm WS2812 panel. Drag to turn the cube and use the slider to pull it apart. The orange USB-C socket and green slide switch sit on the bottom front edge.</p>
   </header>
 
   <div class="stage" id="stage">
@@ -65,15 +65,15 @@ code { font-family: var(--font-mono); font-size: 13px; }
         <button class="tog" id="t-spin" aria-pressed="true">Auto-turn</button>
       </div>
     </div>
-    <div class="hud"><span>88.6 mm cube · 6 shells</span><span><span class="k">■</span> USB-C &nbsp; <span class="s">■</span> SS12F15 switch</span></div>
+    <div class="hud"><span>89.6 mm cube · 6 shells</span><span><span class="k">■</span> USB-C &nbsp; <span class="s">■</span> SS12F15 switch</span></div>
   </div>
 
   <div class="dims">
-    <div class="dim"><span class="n">88.6 mm</span><span class="l">Outer cube edge</span></div>
+    <div class="dim"><span class="n">89.6 mm</span><span class="l">Outer cube edge</span></div>
     <div class="dim"><span class="n">7.5 mm</span><span class="l">From PCB to diffuser skin (light depth)</span></div>
     <div class="dim"><span class="n">1.2 mm</span><span class="l">Diffuser skin over each pixel</span></div>
     <div class="dim"><span class="n">1.6 mm</span><span class="l">Grid walls, 0.76 mm clear of each LED</span></div>
-    <div class="dim"><span class="n">≈ 34 cm³</span><span class="l">Resin per shell</span></div>
+    <div class="dim"><span class="n">≈ 36 cm³</span><span class="l">Resin per shell</span></div>
   </div>
 
   <div class="cols">
@@ -83,13 +83,14 @@ code { font-family: var(--font-mono); font-size: 13px; }
         <tr><td>shell.stl</td><td>× 4. The plain face (top, back, left, right).</td></tr>
         <tr><td>shell_port_front.stl</td><td>× 1. Holds the USB-C cut-out and switch slot.</td></tr>
         <tr><td>shell_port_bottom.stl</td><td>× 1. Has the matching relief for the port pockets.</td></tr>
+        <tr><td>fit_test.stl</td><td>Optional, order first. A cheap 4.9 mm slice of one shell to test-fit a real panel.</td></tr>
         <tr><td>Material</td><td>Translucent or clear resin for every part. Sand or bead-blast the outside for an even frosted glow.</td></tr>
       </table>
     </section>
     <section class="card">
       <h2>Parts to buy</h2>
       <table>
-        <tr><td>6 ×</td><td>WS2812 8×8 panel, 65 × 65 mm</td></tr>
+        <tr><td>6 ×</td><td>WS2812 8×8 panel, 65 × 66 mm</td></tr>
         <tr><td>1 ×</td><td>Snap-in USB-C socket with leads (flange 15.8 × 9.3, 11 mm deep)</td></tr>
         <tr><td>1 ×</td><td>SS12F15 slide switch (19.6 × 5.5 plate)</td></tr>
         <tr><td>2 ×</td><td>M2 × 4 screw + nut for the switch, or glue it</td></tr>
@@ -113,7 +114,7 @@ code { font-family: var(--font-mono); font-size: 13px; }
 <script>
 (() => {
   const S = 65, H = S / 2, T = 1.6, PITCH = S / 8;
-  const Z_BACK = H + 1.5, Z_PCB = Z_BACK + T;
+  const PCB_X = 65, PCB_Y = 66, Z_BACK = PCB_Y / 2 + 1.5, Z_PCB = Z_BACK + T;
   const FACES = [ // name, rotation (deg, single axis), file
     ['front', [0, 0, 0], 'shell_port_front.stl'],
     ['back', [180, 0, 0], 'shell.stl'],
@@ -163,7 +164,7 @@ code { font-family: var(--font-mono); font-size: 13px; }
       const g = new THREE.Group(); g.rotation.set(deg(rot[0]), deg(rot[1]), deg(rot[2]));
       const geo = await load(file);
       const shell = new THREE.Mesh(geo, shellMat); shell.renderOrder = 2; g.add(shell); g.userData.shell = shell;
-      const pcb = new THREE.Mesh(new THREE.BoxGeometry(S, S, T), pcbMat); pcb.position.z = Z_BACK + T / 2; g.add(pcb);
+      const pcb = new THREE.Mesh(new THREE.BoxGeometry(PCB_X, PCB_Y, T), pcbMat); pcb.position.z = Z_BACK + T / 2; g.add(pcb);
       const lens = new THREE.InstancedMesh(lensGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }), 64);
       const glow = new THREE.InstancedMesh(glowGeo, new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }), 64);
       glow.renderOrder = 3;
