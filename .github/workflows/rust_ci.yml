@@ -17,9 +17,45 @@ env:
   RUSTC_WRAPPER: "sccache"
 
 jobs:
+  # Decide which builds are needed. Jobs skipped by their `if` still count as
+  # passed for required status checks, so non-Rust changes (e.g. case/) don't
+  # block merging.
+  changes:
+    name: Detect Rust changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      desktop: ${{ steps.filter.outputs.desktop }}
+      firmware: ${{ steps.filter.outputs.firmware }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            shared: &shared
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - '.cargo/**'
+              - 'core/**'
+              - '.github/workflows/rust_ci.yml'
+            desktop:
+              - *shared
+              - 'desktop/**'
+            firmware:
+              - *shared
+              - 'firmware/**'
+
   # Job for Desktop and Core (Stable Toolchain)
   desktop-core:
     name: Desktop & Core
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -55,6 +91,8 @@ jobs:
   # Job for Firmware (ESP Toolchain)
   firmware:
     name: Firmware
+    needs: changes
+    if: needs.changes.outputs.firmware == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

@@ -45,6 +45,7 @@ ol, ul { margin: 0; padding-left: 20px; display: grid; gap: 5px; }
 .dim { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
 .dim .n { font: 500 20px var(--font-mono); font-variant-numeric: tabular-nums; display: block; }
 .dim .l { color: var(--muted); font-size: 13px; }
+a { color: var(--accent); }
 code { font-family: var(--font-mono); font-size: 13px; }
 </style>
 
@@ -79,11 +80,12 @@ code { font-family: var(--font-mono); font-size: 13px; }
   <div class="cols">
     <section class="card">
       <h2>Order these files</h2>
+      <p style="margin:0;color:var(--muted)">Click a file name to download it. The source is <a href="https://github.com/psytraxx/gravity-cube-rs/tree/main/case/voxel-shell">case/voxel-shell</a> on GitHub.</p>
       <table>
-        <tr><td>shell.stl</td><td>× 4. The plain face (top, back, left, right).</td></tr>
-        <tr><td>shell_port_front.stl</td><td>× 1. Holds the USB-C cut-out and switch slot.</td></tr>
-        <tr><td>shell_port_bottom.stl</td><td>× 1. Has the matching relief for the port pockets.</td></tr>
-        <tr><td>fit_test.stl</td><td>Optional, order first. A cheap 4.9 mm slice of one shell to test-fit a real panel.</td></tr>
+        <tr><td><a href="shell.stl" download>shell.stl</a></td><td>× 4. The plain face (top, back, left, right).</td></tr>
+        <tr><td><a href="shell_port_front.stl" download>shell_port_front.stl</a></td><td>× 1. Holds the USB-C cut-out and switch slot.</td></tr>
+        <tr><td><a href="shell_port_bottom.stl" download>shell_port_bottom.stl</a></td><td>× 1. Has the matching relief for the port pockets.</td></tr>
+        <tr><td><a href="fit_test.stl" download>fit_test.stl</a></td><td>Optional, order first. A cheap 4.9 mm slice of one shell to test-fit a real panel.</td></tr>
         <tr><td>Material</td><td>Translucent or clear resin for every part. Sand or bead-blast the outside for an even frosted glow.</td></tr>
       </table>
     </section>
