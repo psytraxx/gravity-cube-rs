@@ -7,6 +7,8 @@ A **fluid physics simulation** of gravity-responsive particles on a 3D LED cube,
 
 Both versions share the same fluid physics simulation core with continuous particle movement, velocity tracking, and collision detection, demonstrating the power of hexagonal architecture for code reuse across platforms.
 
+**Enclosure:** a 3D-printable translucent case for the cube. You can [view it in 3D and download the STLs](https://psytraxx.github.io/gravity-cube-rs/voxel-shell/viewer.html). Details are in [Enclosure](#-enclosure).
+
 ---
 
 ## Project Structure
@@ -30,6 +32,9 @@ gravity-cube-rs/
 │   ├── build.rs
 │   ├── .cargo/config.toml  # ESP32 target configuration
 │   └── Cargo.toml
+├── case/                   # 3D-printable enclosure (published to GitHub Pages)
+│   ├── concepts.html       # Comparison of five frame concepts
+│   └── voxel-shell/        # STLs, generator, fit checks, 3D viewer
 └── desktop/                # Desktop simulator
     ├── shaders/            # WGSL shaders (vertex, fragment, wireframe)
     ├── src/
@@ -234,6 +239,18 @@ If LEDs don't light:
 - Verify GPIO 16 connection to LED data line
 - Check 5V power supply to LED strips (384 LEDs draw significant current)
 - Confirm LED count matches configuration (384 LEDs)
+
+---
+
+## 📦 Enclosure
+
+The **Voxel Shell** is an 89.6 mm cube made of six mitred face shells, printed in translucent resin. Each shell holds one 65 × 66 mm WS2812 8×8 panel behind an 8×8 light grid and a diffuser skin, so every LED shows as a square pixel. A snap-in USB-C socket and an SS12F15 slide switch sit on the bottom front edge.
+
+- [Interactive 3D viewer and STL downloads](https://psytraxx.github.io/gravity-cube-rs/voxel-shell/viewer.html)
+- [Frame concepts that were compared](https://psytraxx.github.io/gravity-cube-rs/concepts.html)
+- Source, parts list and assembly steps: [`case/voxel-shell/README.md`](case/voxel-shell/README.md)
+
+The site is published from `case/` by `.github/workflows/pages.yml` on every push to `main` that changes it.
 
 ---
 

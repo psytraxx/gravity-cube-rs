@@ -1,0 +1,39 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gravity Cube Enclosure</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..800&family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@400;600&display=swap">
+<style>
+:root {
+  --bg: #eef0f2; --surface: #ffffff; --fg: #1b1f24; --muted: #5d6670; --line: #d5dae0; --accent: #2f8fd8;
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #111418; --surface: #1a1e23; --fg: #e4e8ec; --muted: #94a0ab; --line: #2c333b; --accent: #5aaee8; color-scheme: dark; }
+}
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 var(--font-body); }
+.wrap { max-width: 860px; margin: 0 auto; padding: 40px 20px 56px; display: grid; gap: 22px; }
+h1 { font-family: var(--font-display); font-stretch: 112%; font-weight: 800; font-size: clamp(28px, 5vw, 44px); line-height: 1.05; margin: 0; }
+p { margin: 0; color: var(--muted); max-width: 65ch; }
+img { max-width: 100%; border-radius: 10px; display: block; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+a.card { display: grid; gap: 4px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; color: var(--fg); text-decoration: none; }
+a.card:hover, a.card:focus-visible { border-color: var(--accent); outline: none; }
+a.card b { font-family: var(--font-display); font-size: 19px; }
+a.card span { color: var(--muted); font-size: 14px; }
+.small { font: 13px var(--font-mono); }
+.small a { color: var(--accent); }
+</style>
+<div class="wrap">
+  <h1>Gravity Cube enclosure</h1>
+  <p>A translucent resin case for the 8×8×8 Gravity Cube. Six mitred face shells each hold one 65 × 66 mm WS2812 panel behind an 8×8 light grid, with a USB-C socket and a power switch on the bottom edge.</p>
+  <img src="voxel-shell/preview.png" alt="Renders of the Voxel Shell: the back of one shell, the assembled 89.6 mm cube, and the USB-C and switch edge">
+  <div class="links">
+    <a class="card" href="voxel-shell/viewer.html"><b>Voxel Shell 3D viewer</b><span>Turn the cube, take it apart, and download the STL files.</span></a>
+    <a class="card" href="concepts.html"><b>Frame concepts</b><span>The five enclosure designs that were compared.</span></a>
+  </div>
+  <p class="small">Source: <a href="https://github.com/psytraxx/gravity-cube-rs/tree/main/case">github.com/psytraxx/gravity-cube-rs/case</a></p>
+</div>

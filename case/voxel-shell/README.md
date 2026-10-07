@@ -66,7 +66,10 @@ before ordering.
 
 ## Viewing
 
-Browsers won't load local STL files from `file://`, so serve the folder:
+Online: <https://psytraxx.github.io/gravity-cube-rs/voxel-shell/viewer.html>
+(published from `case/` by `.github/workflows/pages.yml`).
+
+Locally, browsers won't load STL files from `file://`, so serve the folder:
 
 ```bash
 cd case/voxel-shell && python3 -m http.server 8000
