@@ -45,8 +45,8 @@ LIT_SPAN = 80.0  # lit width on the outside of each face (89.6 mm face -> 4.8 mm
 # Along the port edge the cells above the USB-C socket cannot spread all the
 # way: in PORT_COLS the first PORT_ROWS rows share the space between
 # PORT_EDGE and the normal funnel row line instead.
-PORT_COLS = (2, 3)  # above the USB-C socket; the switch is small enough for full cells
-PORT_EDGE = 37.0  # how far (from the face centre) those cells may reach at the skin
+PORT_COLS = (2, 3, 4, 5)  # above the USB-C socket and the switch
+PORT_EDGE = 36.0  # how far (from the face centre) those cells may reach at the skin
 PORT_ROWS = 1  # only the outermost row is shortened
 CLAMP_RING = 0.6  # width of the ring that presses on the PCB margin
 
@@ -58,7 +58,9 @@ Z_PCB = Z_BACK + PCB_T  # front of the PCB (36.1)
 Z_GRID = Z_PCB + RELIEF  # bottom of the grid walls
 Z_SKIN = Z_PCB + GRID_DEPTH  # back of the diffuser skin
 LED_H = 1.6  # WS2812 5050 package height
-Z_KINK = Z_PCB + LED_H + 0.2  # cell walls stay vertical up to here, clear of the LEDs
+# cell walls stay vertical up to here, clear of the LEDs; at least 0.9 mm above the
+# bottom of the grid so the ledge where the outer wall turns outward is printable
+Z_KINK = max(Z_PCB + LED_H + 0.2, Z_GRID + 0.9)
 OUTER = Z_SKIN + SKIN  # front face (44.8 -> 89.6 mm cube)
 
 # ---------------------------------------------------------------- pins
@@ -68,14 +70,14 @@ PIN_ALONG = 25.0  # pin positions along each edge: +-PIN_ALONG
 PIN_AT = 37.0  # where the pin axis meets the mitre (x = z = PIN_AT)
 
 # ---------------------------------------------------------------- USB-C + switch (cube coordinates; front = +Z, bottom = -Y)
-# Both sit on a 45 degree bevel cut into the bottom front edge, an inset
-# facet BEVEL_S deep (measured square to the facet) that stays inside the
-# unlit rim. The parts point diagonally into the wedge between the front
-# and bottom panels. Part geometry below is written as if the facet were a
-# front face at z = OUTER with its centre line at y = 0; bevel_place() turns
-# it onto the facet.
+# All twelve cube edges carry a 45 degree bevel BEVEL_S deep (measured square
+# to the facet). It stays inside the unlit rim and turns the knife edge where
+# a mitre meets the skin into a solid corner. The socket and switch sit on
+# the bevel of the bottom front edge and point diagonally into the wedge
+# between the front and bottom panels. Part geometry below is written as if
+# the facet were a front face at z = OUTER with its centre line at y = 0;
+# bevel_place() turns it onto the facet.
 BEVEL_S = 2.5  # facet depth from the edge; meets each face BEVEL_S * sqrt(2) from the edge
-BEVEL_X = (-21.0, 21.0)  # facet length along the edge
 #
 # USB-C: snap-in socket with flying leads. Flange 15.8 x 9.3 x 2.0, body 9.0
 # deep behind it. The flange stays on the outside; the body goes through a
@@ -83,7 +85,7 @@ BEVEL_X = (-21.0, 21.0)  # facet length along the edge
 # snap wings open into the wider pocket behind it.
 USB_FLANGE = (15.8, 9.3, 2.0)
 USB_BODY_DEPTH = 9.0
-USB_CUTOUT = (14.6, 8.2)  # check against your socket's body; flange laps 0.6 mm
+USB_CUTOUT = (14.6, 8.6)  # check against your socket's body; flange laps 0.6 mm
 USB_WALL = 1.6
 USB_X = -9.2  # socket centre along the edge
 # Slide switch: SS12F15-style, plate 19.6 x 5.5 with M2 holes 11.5 apart,
@@ -93,13 +95,15 @@ SW_DEPTH = 7.8
 SW_PLATE_T = 0.6  # metal mounting plate thickness
 SW_BODY_W = 8.6  # switch body length behind the plate
 SW_HOLE_PITCH = 11.5
-SW_SCREW_D = 2.2  # M2 screws through the wall (set 0 to glue instead)
+SW_SCREW_D = 0  # M2 screw holes through the wall (0 = glue; no room for nuts behind the plate)
 SW_SLOT = (6.6, 3.4)  # lever opening: 3 mm travel + lever + clearance
-SW_WALL = 1.0
+SW_WALL = 1.6  # the plate pocket runs past the facet; 1.6 keeps 0.8 mm under the faces
 SW_X = 10.0
 PART_FIT = 0.2  # clearance per side
+MIN_WALL = 0.8  # PCBWay SLA minimum wall
 SW_BODY_H = 3.6  # switch body height across the facet
-WIRE_SLOT = (8.0, 1.4)  # wire channel from each pocket into the cube, along the diagonal
+WIRE_SLOT = (8.0, 4.4)  # wire channel from each pocket into the cube, along the diagonal;
+# 4.4 tall so it takes out the board-pocket lips where it passes instead of leaving slivers
 WIRE_LEN = 6.0  # how far the wire channel runs past the back of each pocket
 
 SEG = 48
@@ -124,6 +128,33 @@ def frustum():
             for sy in (-1, 1):
                 pts.append([sx * z, sy * z, z])
     return Manifold.hull_points(np.array(pts))
+
+
+def _rotation_to(n):
+    """3x3 rotation taking +Z onto the unit vector n."""
+    z = np.array([0.0, 0.0, 1.0])
+    n = np.asarray(n, float) / np.linalg.norm(n)
+    v = np.cross(z, n)
+    c = float(z @ n)
+    if np.linalg.norm(v) < 1e-12:
+        return np.eye(3) if c > 0 else np.diag([1.0, -1.0, -1.0])
+    vx = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
+    return np.eye(3) + vx + vx @ vx / (1 + c)
+
+
+def chamfered_cube():
+    """The outer cube with all twelve edges bevelled at 45 degrees."""
+    k = OUTER * math.sqrt(2) - BEVEL_S  # facet distance from the centre
+    c = box(-OUTER, OUTER, -OUTER, OUTER, -OUTER, OUTER)
+    for a, b in ((0, 1), (0, 2), (1, 2)):
+        for sa in (-1, 1):
+            for sb in (-1, 1):
+                n = np.zeros(3)
+                n[a], n[b] = sa, sb
+                n /= np.linalg.norm(n)
+                m = np.hstack([_rotation_to(n), (n * k).reshape(3, 1)])
+                c = c - box(-200, 200, -200, 200, 0, 200).transform(m)
+    return c
 
 
 def pin_holes():
@@ -165,7 +196,7 @@ def _cell(xb, yb, xt, yt):
 def face_shell(port_side=0):
     """One mitred face shell. port_side = -1 / +1 shortens the outer cells along the
     -Y / +Y edge in PORT_COLS, leaving room for the USB-C socket."""
-    s = frustum()
+    s = frustum() ^ chamfered_cube()
     ax, ay = HX + FIT, HY + FIT
     # PCB pocket
     s = s - box(-ax, ax, -ay, ay, Z_BACK - 1, Z_PCB)
@@ -207,16 +238,26 @@ def bevel_place(m):
     return m.translate([0, 0, -OUTER]).rotate([45, 0, 0]).translate([0, -c, c])
 
 
+def _blunt(x0, x1, v_edge, min_t=MIN_WALL):
+    """Square off the 45 degree wedges where a pocket wall at v = +-v_edge (facet
+    frame) runs out through the front or bottom face, so the shell is at least
+    min_t thick there. Returns the material to remove, in cube coordinates."""
+    c = math.sqrt(2) * v_edge
+    y_c = (c - OUTER) + min_t * math.sqrt(2)  # front face: cut back to here
+    front = bevel_place(box(x0, x1, v_edge, 40, OUTER - 50, OUTER + 10)) ^ box(x0, x1, -60, y_c, -60, 60)
+    bottom = bevel_place(box(x0, x1, -40, -v_edge, OUTER - 50, OUTER + 10)) ^ box(x0, x1, -60, 60, -y_c, 60)
+    return front + bottom
+
+
 def port_cut():
-    """Bevel, USB-C socket and slide switch cavities in cube coordinates."""
+    """USB-C socket and slide switch cavities in cube coordinates (on the bottom front bevel)."""
     f = PART_FIT
-    cut = box(BEVEL_X[0], BEVEL_X[1], -30, 30, OUTER, OUTER + 30)
     # USB-C: cut-out through the wall, wider pocket behind for body and snap wings
     cw, ch = USB_CUTOUT
-    cut = cut + box(USB_X - cw / 2, USB_X + cw / 2, -ch / 2, ch / 2, OUTER - USB_WALL - 1, OUTER + 1)
-    pw = USB_FLANGE[0] + 2 * f
+    cut = box(USB_X - cw / 2, USB_X + cw / 2, -ch / 2, ch / 2, OUTER - USB_WALL - 1, OUTER + 1)
+    pw = USB_FLANGE[0]  # pocket as wide as the flange, so every opening stays covered
     usb_back = OUTER - USB_WALL - USB_BODY_DEPTH + USB_FLANGE[2] - 0.5
-    cut = cut + box(USB_X - pw / 2, USB_X + pw / 2, -ch / 2 - f, ch / 2 + f, usb_back, OUTER - USB_WALL)
+    cut = cut + box(USB_X - pw / 2, USB_X + pw / 2, -ch / 2, ch / 2, usb_back, OUTER - USB_WALL)
     # switch: plate sits against the inside of a thin wall, lever through a slot
     sw, sh = SW_PLATE[0] + 2 * f, SW_PLATE[1] + 2 * f
     plate = OUTER - SW_WALL
@@ -235,7 +276,15 @@ def port_cut():
     ww, wh = WIRE_SLOT
     for x, zb in ((USB_X, usb_back), (SW_X, sw_back)):
         cut = cut + box(x - ww / 2, x + ww / 2, -wh / 2, wh / 2, zb - WIRE_LEN, zb + 0.01)
-    return bevel_place(cut)
+    # the snap wings only need the wall in a band around the middle; beyond it the
+    # wall would taper to nothing under the faces, so open it (the flange covers it)
+    band = BEVEL_S + USB_WALL - MIN_WALL * math.sqrt(2)  # faces run along v + w = BEVEL_S in the facet frame
+    for sv in (1, -1):
+        lo, hi = sorted((sv * band, sv * 40))
+        cut = cut + box(USB_X - pw / 2, USB_X + pw / 2, lo, hi, OUTER - USB_WALL - 0.01, OUTER + 1)
+    cut = bevel_place(cut)
+    cut = cut + _blunt(USB_X - pw / 2, USB_X + pw / 2, ch / 2)
+    return cut
 
 
 def rounded_rect(w, h, r, depth):

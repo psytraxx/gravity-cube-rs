@@ -93,6 +93,21 @@ check("alignment pin holes vs light cells, 0.4 mm margin", (grown(g.pin_holes())
 check("alignment pin holes vs port pockets", (g.pin_holes().rotate(g.FACES["front"]) ^ cut).volume()
       + (g.pin_holes().rotate(g.FACES["bottom"]) ^ cut).volume())
 
+print("== printability (PCBWay SLA: walls >= 0.8 mm)")
+import numpy as np, trimesh
+for fname in ("shell.stl", "shell_port_front.stl", "shell_port_bottom.stl"):
+    tm = trimesh.load(fname)
+    np.random.seed(0)
+    pts, fi = trimesh.sample.sample_surface_even(tm, 60000)
+    nn = tm.face_normals[fi]
+    o = pts - nn * 1e-3
+    loc, ri, ti = tm.ray.intersects_location(o, -nn, multiple_hits=False)
+    d = np.linalg.norm(loc - o[ri], axis=1)
+    # wall thickness = distance to an opposite, near-parallel surface (45 degree edges are not walls)
+    opp = (tm.face_normals[ti] * nn[ri]).sum(1) < -0.9
+    thinnest = float(d[opp].min())
+    check(f"{fname} thinnest wall {thinnest:.2f} mm (must be >= {g.MIN_WALL})", g.MIN_WALL - thinnest if thinnest < g.MIN_WALL else 0.0)
+
 print("== wiring")
 edge_channel = g.box(-20, 20, -g.Z_BACK, -g.HMAX, g.HMAX, g.Z_BACK)
 check("port pockets open into the edge channel (must be > 0)", (cut ^ edge_channel).volume(), want_zero=False)

@@ -9,12 +9,14 @@ a 1.2 mm diffuser skin, all printed as one translucent part. The cells start
 at the LEDs (8.125 mm pitch) and fan out to a 10 mm pitch, so the pixels fill
 80 mm of each 89.6 mm face with only a 4.8 mm rim at the edges.
 
-The USB-C socket and the switch sit on a 45° bevel cut into the bottom front
-edge: an inset facet 5 mm wide and 42 mm long that stays inside the unlit rim.
-Both parts point diagonally into the wedge between the front and bottom
-panels. Only the two cells directly above the socket (columns 2–3, outer row
-on the front and bottom faces) stop 3 mm short of the rim. Every other cell
-runs out to the rim.
+All twelve edges carry a 45° bevel, 2.5 mm deep (a 5 mm facet) that stays
+inside the unlit rim. The USB-C socket and the switch sit on the bevel of the
+bottom front edge and point diagonally into the wedge between the front and
+bottom panels. The four cells above them (columns 2–5, outer row on the front
+and bottom faces) stop 4 mm short of the rim. Every other cell runs out to it.
+
+The shells meet PCBWay's SLA rule of walls at least 0.8 mm (thinnest: 1.0 mm on
+the plain shell, 0.83 mm around the ports); `check_fit.py` measures this.
 
 ## Files
 
@@ -39,7 +41,6 @@ bead-blast the outside for an even frosted diffusion.
 - 6 × WS2812 8×8 panel, 65 × 66 × 1.6 mm (LED grid 8.125 mm pitch, centred)
 - 1 × snap-in USB-C socket with leads: flange 15.8 × 9.3 × 2.0, 9.0 deep behind the flange
 - 1 × SS12F15 slide switch: plate 19.6 × 5.5, M2 holes 11.5 apart
-- 2 × M2 × 4 screw + nut for the switch, or glue it in
 - 24 × 2 mm dowel, about 5.5 mm long (1.75 mm filament works), for the mitre alignment holes
 
 ## Key dimensions
@@ -53,9 +54,9 @@ bead-blast the outside for an even frosted diffusion.
 | Grid walls | 1.6 thick; vertical beside the LEDs (0.76 clear, 0.26 if the grid is 0.5 off-centre on the 66 side), then fanning out; stop 1.3 above the PCB (clears capacitors) |
 | PCB front to diffuser skin | 7.5 |
 | Clamp ring on the PCB margin | 0.6 (outer LEDs start 1.56 from the 65 mm edges) |
-| Port bevel | 45°, 2.5 deep (5 mm facet), x = −21…21 on the bottom front edge |
-| USB-C cut-out | 14.6 × 8.2 in a 1.6 wall; the flange stays on the outside and overhangs the facet |
-| Switch lever slot | 6.6 × 3.4 in a 1.0 wall |
+| Edge bevel | 45°, 2.5 deep (5 mm facet), on all twelve edges |
+| USB-C cut-out | 14.6 × 8.6 in a 1.6 wall; the flange (15.8 × 9.3) stays on the outside and covers it |
+| Switch lever slot | 6.6 × 3.4 in a 1.6 wall; the switch is glued in |
 
 `USB_CUTOUT` is an estimate: the drawing only gives the flange size. Measure
 the body of your socket behind the flange and change it in `generate.py`
@@ -66,7 +67,7 @@ before ordering.
 1. Press each panel into its shell, LEDs towards the grid. The pocket is
    65.5 × 66.5, so the 66 mm side goes along the long side of the pocket. A few dots of glue
    on the PCB rim hold it.
-2. Push the USB-C socket into the bevel from outside. Screw or glue the
+2. Push the USB-C socket into the bevel from outside. Glue the
    switch to the inside of the bevel wall so its lever comes through the slot.
    Both pockets are split between the front and bottom port shells, so fit
    the parts after those two shells are joined.
@@ -94,7 +95,7 @@ Corner Bumpers, Lantern Cage, Pinwheel, Voxel Shell) and opens directly.
 ## Rebuilding
 
 ```bash
-pip install manifold3d trimesh numpy
+pip install manifold3d trimesh numpy rtree
 python3 generate.py
 python3 check_fit.py   # must end with "All checks passed."
 ```
