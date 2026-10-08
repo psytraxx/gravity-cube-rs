@@ -178,7 +178,8 @@ code { font-family: var(--font-mono); font-size: 13px; }
   // soft-edged square: the lit pixel as seen through the diffuser skin
   const glowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
     g.filter = 'blur(5px)'; g.fillStyle = '#fff'; g.fillRect(9, 9, 46, 46); return new THREE.CanvasTexture(c); })();
-  const pixels = []; const lensMeshes = [], glowMeshes = [];
+  const pixels = []; const lensMeshes = [], glowMeshes = [], skinMeshes = [];
+  let clearShell = true;
 
   async function build() {
     for (const [name, rot, file] of FACES) {
@@ -193,11 +194,17 @@ code { font-family: var(--font-mono); font-size: 13px; }
       for (const c of skinCells(PORT_SIDE[name] || 0)) {
         const x = (c.i + 0.5) * PITCH - H, y = (c.j + 0.5) * PITCH - H;
         d.position.set(x, y, Z_PCB + 1.6); d.scale.set(1, 1, 1); d.updateMatrix(); lens.setMatrixAt(k, d.matrix);
-        d.position.set(c.x, c.y, Z_SKIN + 0.6); d.scale.set(c.w * 1.25, c.h * 1.25, 1); d.updateMatrix(); glow.setMatrixAt(k, d.matrix);
+        // pixel sits just outside the 1.2 mm skin, so it shows in both shell modes
+        d.position.set(c.x, c.y, Z_SKIN + 1.2 + 0.05); d.scale.set(c.w * 1.25, c.h * 1.25, 1); d.updateMatrix(); glow.setMatrixAt(k, d.matrix);
         pixels.push({ pos: new THREE.Vector3(c.x, c.y, Z_SKIN).applyEuler(g.rotation), mesh: k, face: faceGroups.length });
         k++;
       }
-      g.add(lens, glow); lensMeshes.push(lens); glowMeshes.push(glow);
+      // solid-shell mode: pixels as coloured patches on the frosted skin (additive glow washes out on white)
+      const skin = new THREE.InstancedMesh(glowGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }), 64);
+      for (let n = 0; n < 64; n++) { glow.getMatrixAt(n, d.matrix); d.matrix.decompose(d.position, d.quaternion, d.scale);
+        d.scale.set(d.scale.x / 1.25, d.scale.y / 1.25, 1); d.updateMatrix(); skin.setMatrixAt(n, d.matrix); }
+      skin.visible = false;
+      g.add(lens, glow, skin); lensMeshes.push(lens); glowMeshes.push(glow); skinMeshes.push(skin);
       g.userData.normal = new THREE.Vector3(0, 0, 1).applyEuler(g.rotation);
       if (name === 'front') {
         const [u, s] = await Promise.all([load('part_usb_c_socket.stl'), load('part_slide_switch_ss12f15.stl')]);
@@ -210,6 +217,7 @@ code { font-family: var(--font-mono); font-size: 13px; }
   }
 
   // ---- animation / gravity fill ----
+  const SKIN_OFF = new THREE.Color(0xe4ecf2).convertSRGBToLinear();
   const WATER = new THREE.Color(100 / 255, 180 / 255, 255 / 255), OFF = new THREE.Color(0x2a2e33), tmp = new THREE.Color();
   let ledsOn = true, explode = 0, spin = !matchMedia('(prefers-reduced-motion: reduce)').matches;
   const gLocal = new THREE.Vector3(), inv = new THREE.Quaternion();
@@ -221,9 +229,11 @@ code { font-family: var(--font-mono); font-size: 13px; }
       const b = ledsOn && dpt > 0 ? Math.min(1, 0.45 + dpt / 25 + (dpt < 6 ? 0.3 : 0)) : 0;
       lensMeshes[p.face].setColorAt(p.mesh, b ? tmp.copy(WATER).multiplyScalar(0.6 + b * 0.6) : OFF);
       glowMeshes[p.face].setColorAt(p.mesh, tmp.copy(WATER).multiplyScalar(b * 0.9));
+      skinMeshes[p.face].setColorAt(p.mesh, tmp.copy(SKIN_OFF).lerp(WATER, b ? 0.55 + 0.45 * b : 0));
     }
     lensMeshes.forEach(m => m.instanceColor && (m.instanceColor.needsUpdate = true));
     glowMeshes.forEach(m => m.instanceColor && (m.instanceColor.needsUpdate = true));
+    skinMeshes.forEach(m => m.instanceColor && (m.instanceColor.needsUpdate = true));
   }
 
   // ---- interaction ----
@@ -237,7 +247,8 @@ code { font-family: var(--font-mono); font-size: 13px; }
   const bind = (id, fn) => { const b = document.getElementById(id); b.addEventListener('click', () => { const v = fn(); b.setAttribute('aria-pressed', String(v)); }); return b; };
   bind('t-leds', () => (ledsOn = !ledsOn));
   bind('t-clear', () => { const clear = faceGroups[0] && faceGroups[0].userData.shell.material !== shellMat;
-    faceGroups.forEach(g => g.userData.shell.material = clear ? shellMat : shellSolid); return clear; });
+    faceGroups.forEach(g => g.userData.shell.material = clear ? shellMat : shellSolid);
+    clearShell = clear; glowMeshes.forEach(m => m.visible = clear); skinMeshes.forEach(m => m.visible = !clear); return clear; });
   const spinBtn = bind('t-spin', () => (spin = !spin)); spinBtn.setAttribute('aria-pressed', String(spin));
   bind('t-port', () => { const on = view !== PORT; view = on ? PORT : HOME;
     if (on) { cube.quaternion.setFromEuler(new THREE.Euler(-0.25, 0.35, 0)); spin = false; spinBtn.setAttribute('aria-pressed', 'false'); }
