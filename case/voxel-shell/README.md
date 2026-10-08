@@ -4,9 +4,14 @@
 
 An 89.6 mm cube built from six identical face shells with 45° mitred edges.
 Each shell holds one 65 × 66 mm WS2812 8×8 panel (`../led_module.png`) in a
-pocket. In front of the panel sits an 8×8 light grid and a 1.2 mm diffuser
-skin, all printed as one translucent part. Every LED becomes a square pixel,
-and the edges glow too.
+pocket. In front of the panel sits an 8×8 grid of funnel-shaped light cells and
+a 1.2 mm diffuser skin, all printed as one translucent part. The cells start
+at the LEDs (8.125 mm pitch) and fan out to a 10 mm pitch, so the pixels fill
+80 mm of each 89.6 mm face with only a 4.8 mm rim at the edges.
+
+Along the bottom front edge, the four cells above the USB-C socket and switch
+(columns 2–5) stay straight and their bottom three rows are a little shorter,
+leaving room for the ports. Every other cell runs out to the rim.
 
 ## Files
 
@@ -32,7 +37,7 @@ bead-blast the outside for an even frosted diffusion.
 - 1 × snap-in USB-C socket with leads: flange 15.8 × 9.3 × 2.0, 9.0 deep behind the flange
 - 1 × SS12F15 slide switch: plate 19.6 × 5.5, M2 holes 11.5 apart
 - 2 × M2 × 4 screw + nut for the switch, or glue it in
-- 24 × 2 mm dowel, about 7 mm long (1.75 mm filament works), for the mitre alignment holes
+- 24 × 2 mm dowel, about 5.5 mm long (1.75 mm filament works), for the mitre alignment holes
 
 ## Key dimensions
 
@@ -41,7 +46,8 @@ bead-blast the outside for an even frosted diffusion.
 | Outer cube | 89.6 |
 | PCB pocket | 65.5 × 66.5 × 1.6 (0.25 clearance per side) |
 | Gap from panel back to the neighbour's edge | 1.5 (leaves a wire channel along every edge) |
-| Grid walls | 1.6 thick, 0.76 clear of each LED (0.26 if the grid is 0.5 off-centre on the 66 side), stop 1.3 above the PCB (clears capacitors) |
+| Lit area | 80 × 80 per face, 10 mm pixel pitch, 4.8 mm rim |
+| Grid walls | 1.6 thick; vertical beside the LEDs (0.76 clear, 0.26 if the grid is 0.5 off-centre on the 66 side), then fanning out; stop 1.3 above the PCB (clears capacitors) |
 | PCB front to diffuser skin | 7.5 |
 | Clamp ring on the PCB margin | 0.6 (outer LEDs start 1.56 from the 65 mm edges) |
 | USB-C cut-out | 14.6 × 8.2 in a 1.6 wall; the flange stays on the outside |

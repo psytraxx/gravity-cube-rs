@@ -38,7 +38,15 @@ PANEL_GAP = 1.5  # gap between the back of a panel and its neighbour's edge
 RELIEF = 1.3  # grid walls stop this far above the PCB (clears the capacitors)
 GRID_DEPTH = 7.5  # PCB front to diffuser skin (deep enough for the USB-C socket)
 SKIN = 1.2  # diffuser skin thickness
-WALL = 1.6  # grid wall thickness
+WALL = 1.6  # grid wall thickness (measured along the face)
+# Funnel cells: each LED's cell starts at the LED grid on the PCB and widens
+# towards the skin, so the 8 x 8 pixels spread over LIT_SPAN of the outer face.
+LIT_SPAN = 80.0  # lit width on the outside of each face (89.6 mm face -> 4.8 mm rim)
+# Along the port edge the cells above the USB-C socket and switch cannot
+# spread: in PORT_COLS the first PORT_ROWS rows share the space between the
+# straight LED-grid edge and the normal funnel row line instead.
+PORT_COLS = (2, 3, 4, 5)
+PORT_ROWS = 3
 CLAMP_RING = 0.6  # width of the ring that presses on the PCB margin
 
 H = GRID_SPAN / 2  # half of the LED grid (32.5)
@@ -48,13 +56,15 @@ Z_BACK = HMAX + PANEL_GAP  # back of the PCB / back of the shell (34.5)
 Z_PCB = Z_BACK + PCB_T  # front of the PCB (36.1)
 Z_GRID = Z_PCB + RELIEF  # bottom of the grid walls
 Z_SKIN = Z_PCB + GRID_DEPTH  # back of the diffuser skin
+LED_H = 1.6  # WS2812 5050 package height
+Z_KINK = Z_PCB + LED_H + 0.2  # cell walls stay vertical up to here, clear of the LEDs
 OUTER = Z_SKIN + SKIN  # front face (44.8 -> 89.6 mm cube)
 
 # ---------------------------------------------------------------- pins
 PIN_D = 2.1  # for 2 mm dowels or 1.75 mm filament
-PIN_DEPTH = 4.0
+PIN_DEPTH = 3.0  # per side; must stay clear of the funnel cells
 PIN_ALONG = 25.0  # pin positions along each edge: +-PIN_ALONG
-PIN_AT = 38.0  # where the pin axis meets the mitre (x = z = PIN_AT)
+PIN_AT = 37.0  # where the pin axis meets the mitre (x = z = PIN_AT)
 
 # ---------------------------------------------------------------- USB-C + switch (cube coordinates; front = +Z, bottom = -Y)
 # Both sit in the border of the front face along the bottom edge.
@@ -67,16 +77,18 @@ USB_FLANGE = (15.8, 9.3, 2.0)
 USB_BODY_DEPTH = 9.0
 USB_CUTOUT = (14.6, 8.2)  # check against your socket's body; flange laps 0.6 mm
 USB_WALL = 1.6
-USB_X = -10.0  # socket centre along the edge
+USB_X = -9.5  # socket centre along the edge
 # Slide switch: SS12F15-style, plate 19.6 x 5.5 with M2 holes 11.5 apart,
 # 7.8 mm from the plate to the pin tips, 3 mm lever travel.
 SW_PLATE = (19.6, 5.5)
 SW_DEPTH = 7.8
+SW_PLATE_T = 0.6  # metal mounting plate thickness
+SW_BODY_W = 8.6  # switch body length behind the plate
 SW_HOLE_PITCH = 11.5
 SW_SCREW_D = 2.2  # M2 screws through the wall (set 0 to glue instead)
 SW_SLOT = (6.6, 3.4)  # lever opening: 3 mm travel + lever + clearance
 SW_WALL = 1.2
-SW_X = 10.5
+SW_X = 9.6
 PART_FIT = 0.2  # clearance per side
 PORT_FLOOR = 1.2  # wall left above the bottom face
 PORT_TOP = -(HMAX + FIT + 0.6)  # keep clear of the front panel pocket
@@ -124,7 +136,27 @@ def sum_all(parts):
     return out
 
 
-def face_shell():
+def _funnel(n_edge_lo, n_edge_hi):
+    """Skin-side boundaries for 8 cells between the two given half-widths."""
+    lo, hi = -n_edge_lo, n_edge_hi
+    return [lo + k * (hi - lo) / 8 for k in range(9)]
+
+
+def _rect(x, y, z):
+    w = WALL / 2
+    return [[xx, yy, z] for xx in (x[0] + w, x[1] - w) for yy in (y[0] + w, y[1] - w)]
+
+
+def _cell(xb, yb, xt, yt):
+    """Light cell: straight beside the LED (up to Z_KINK), then a funnel to its skin rectangle."""
+    straight = Manifold.hull_points(np.array(_rect(xb, yb, Z_GRID - 0.01) + _rect(xb, yb, Z_KINK + 0.01)))
+    funnel = Manifold.hull_points(np.array(_rect(xb, yb, Z_KINK) + _rect(xt, yt, Z_SKIN)))
+    return straight + funnel
+
+
+def face_shell(port_side=0):
+    """One mitred face shell. port_side = -1 / +1 keeps straight cells along the
+    -Y / +Y edge in PORT_COLS, leaving room for the USB-C socket and switch."""
     s = frustum()
     ax, ay = HX + FIT, HY + FIT
     # PCB pocket
@@ -132,17 +164,33 @@ def face_shell():
     # relief over the LEDs and capacitors, leaving a ring on the PCB margin
     rx, ry = HX - CLAMP_RING, HY - CLAMP_RING
     s = s - box(-rx, rx, -ry, ry, Z_PCB - 0.01, Z_GRID)
-    # 8 x 8 light cells
-    half = (PITCH - WALL) / 2
-    cells = []
-    for i in range(8):
-        for j in range(8):
-            cx = (i + 0.5) * PITCH - H
-            cy = (j + 0.5) * PITCH - H
-            cells.append(box(cx - half, cx + half, cy - half, cy + half, Z_GRID - 0.01, Z_SKIN))
-    s = s - sum_all(cells)
+    s = s - sum_all(light_cells(port_side))
     s = s - pin_holes()
     return s
+
+
+def light_cells(port_side=0):
+    """The 64 funnel cells of one face (as solids to subtract)."""
+    led = [-H + k * PITCH for k in range(9)]
+    wl = LIT_SPAN / 2
+    xt = _funnel(wl, wl)
+    yt_all = _funnel(wl, wl)
+    cells = []
+    for i in range(8):
+        yt = list(yt_all)
+        if port_side and i in PORT_COLS:
+            n = PORT_ROWS
+            if port_side < 0:
+                lo, hi = led[0], yt_all[n]
+                for k in range(n + 1):
+                    yt[k] = lo + k * (hi - lo) / n
+            else:
+                lo, hi = yt_all[8 - n], led[8]
+                for k in range(n + 1):
+                    yt[8 - n + k] = lo + k * (hi - lo) / n
+        for j in range(8):
+            cells.append(_cell((led[i], led[i + 1]), (led[j], led[j + 1]), (xt[i], xt[i + 1]), (yt[j], yt[j + 1])))
+    return cells
 
 
 def port_band():
@@ -164,7 +212,9 @@ def port_cut():
     sw, sh = SW_PLATE[0] + 2 * f, SW_PLATE[1] + 2 * f
     plate = OUTER - SW_WALL
     sw_back = plate - SW_DEPTH - 0.4
-    cut = cut + box(SW_X - sw / 2, SW_X + sw / 2, yc - sh / 2, yc + sh / 2, sw_back, plate)
+    # full width only for the thin mounting plate; the body behind it is narrower
+    cut = cut + box(SW_X - sw / 2, SW_X + sw / 2, yc - sh / 2, yc + sh / 2, plate - SW_PLATE_T - 0.4, plate)
+    cut = cut + box(SW_X - SW_BODY_W / 2 - f, SW_X + SW_BODY_W / 2 + f, yc - sh / 2, yc + sh / 2, sw_back, plate)
     cut = cut + box(SW_X - SW_SLOT[0] / 2, SW_X + SW_SLOT[0] / 2,
                     yc - SW_SLOT[1] / 2, yc + SW_SLOT[1] / 2, plate - 1, OUTER + 1)
     if SW_SCREW_D:
@@ -226,6 +276,11 @@ FACES = {
 }
 
 
+# The port edge is the bottom front edge: -Y on the front shell, +Y on the
+# bottom shell (its local +Y points to the front of the cube).
+PORT_FACES = {"front": -1, "bottom": 1}
+
+
 def unplace(m, rot):
     """Inverse of Manifold.rotate(rot) for the single-axis rotations above."""
     return m.rotate([-a for a in rot])
@@ -245,10 +300,11 @@ def main():
     parts = {"shell.stl": shell, "fit_test.stl": fit_test()}
     placed = {}
     for name, rot in FACES.items():
-        p = shell.rotate(rot)
-        if name in ("front", "bottom"):
-            p = p - cut
+        if name in PORT_FACES:
+            p = face_shell(PORT_FACES[name]).rotate(rot) - cut
             parts[f"shell_port_{name}.stl"] = unplace(p, rot)
+        else:
+            p = shell.rotate(rot)
         placed[name] = p
 
     for fname, m in parts.items():

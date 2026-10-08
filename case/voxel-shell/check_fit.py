@@ -40,6 +40,14 @@ def panel(dx=0.0, dy=0.0, oversize=0.0):
 shell = g.face_shell()
 cut = g.port_cut()
 
+
+def grown(m, d=0.4):
+    """Crude Minkowski grow: union of copies shifted by +-d on each axis."""
+    out = m
+    for v in ([d, 0, 0], [-d, 0, 0], [0, d, 0], [0, -d, 0], [0, 0, d], [0, 0, -d]):
+        out = out + m.translate(v)
+    return out
+
 print("== one shell and its own panel")
 for label, dx, dy in (("LED grid centred", 0, 0), ("LED grid 0.5 mm off-centre on the 66 mm side", 0, 0.5)):
     pcb, leds, caps = panel(dx, dy)
@@ -59,11 +67,12 @@ for combo in itertools.product((0, 90), repeat=4):
     turns = dict(zip(("back", "top", "right", "left"), combo))
     for name, rot in g.FACES.items():
         spin = turns.get(name, 0)
-        sh = shell.rotate([0, 0, spin])
+        base = g.face_shell(g.PORT_FACES[name]) if name in g.PORT_FACES else shell
+        sh = base.rotate([0, 0, spin])
         pcb, leds, caps = panel()
         bd = (pcb + leds + caps).rotate([0, 0, spin])
         sh, bd = sh.rotate(rot), bd.rotate(rot)
-        if name in ("front", "bottom"):
+        if name in g.PORT_FACES:
             sh = sh - cut
         shells.append(sh)
         boards.append(bd)
@@ -75,6 +84,14 @@ for combo in itertools.product((0, 90), repeat=4):
     worst = max(worst, (allshells ^ usb).volume(), (allshells ^ sw).volume(),
                 (allboards ^ usb).volume(), (allboards ^ sw).volume())
 check("worst overlap over 16 orientations (shells, boards, USB-C, switch)", worst)
+
+print("== funnel cells")
+for name, side in g.PORT_FACES.items():
+    cells = g.sum_all(g.light_cells(side)).rotate(g.FACES[name])
+    check(f"{name} port pockets vs light cells, 0.4 mm margin", (grown(cut) ^ cells).volume())
+check("alignment pin holes vs light cells, 0.4 mm margin", (grown(g.pin_holes()) ^ g.sum_all(g.light_cells(0))).volume())
+check("alignment pin holes vs port pockets", (g.pin_holes().rotate(g.FACES["front"]) ^ cut).volume()
+      + (g.pin_holes().rotate(g.FACES["bottom"]) ^ cut).volume())
 
 print("== wiring")
 edge_channel = g.box(-20, 20, -g.Z_BACK, -g.HMAX, g.HMAX, g.Z_BACK)
