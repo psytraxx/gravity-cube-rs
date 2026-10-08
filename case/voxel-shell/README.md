@@ -24,7 +24,7 @@ runs out to the rim.
 | `shell_port_front.stl` | 1 | USB-C cut-out and switch slot along its bottom edge |
 | `shell_port_bottom.stl` | 1 | Matching relief for the port pockets; that edge faces the front shell |
 | `fit_test.stl` | 1 | Optional, order first: a 4.9 mm slice of a shell (pocket, rim, bottom of the grid) to test-fit a real panel cheaply |
-| `part_usb_c_socket.stl` | – | Reference model only (not printed) |
+| `part_usb_c_socket.stl`, `part_usb_c_metal.stl`, `part_usb_c_lead_*.stl` | – | Reference model of the USB-C socket: clear housing with snap wings, metal receptacle, red and black leads (not printed) |
 | `part_slide_switch_ss12f15.stl` | – | Reference model only (not printed) |
 | `assembly_preview.stl` | – | All six shells assembled, for checking fit |
 | `generate.py` | – | Parametric source; rebuilds every STL |

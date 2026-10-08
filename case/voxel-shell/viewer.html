@@ -31,7 +31,7 @@ h1 { font-family: var(--font-display); font-stretch: 112%; font-weight: 800; fon
 .tog:focus-visible, input:focus-visible { outline: 2px solid #5aaee8; outline-offset: 2px; }
 input[type=range] { width: 110px; accent-color: #5aaee8; }
 .hud { position: absolute; left: 14px; right: 14px; bottom: 12px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font: 12px var(--font-mono); color: var(--studio-fg); pointer-events: none; }
-.hud .k { color: #ff9a55; } .hud .s { color: #4fdc98; }
+.hud .k { color: #dfe7ee; } .hud .s { color: #4fdc98; }
 #loading { position: absolute; inset: 0; display: grid; place-items: center; font: 13px var(--font-mono); color: var(--studio-fg); }
 .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; min-width: 0; display: grid; gap: 10px; align-content: start; }
@@ -52,7 +52,7 @@ code { font-family: var(--font-mono); font-size: 13px; }
 <div class="wrap">
   <header>
     <h1>Voxel Shell</h1>
-    <p class="lede">This shows the actual STL files: six mitred face shells in translucent resin, each holding one 65 × 66 mm WS2812 panel. The light cells fan out from the LEDs so the pixels cover 80 mm of each 89.6 mm face. Drag to turn the cube and use the slider to pull it apart. The orange USB-C socket and green slide switch sit on a 45° bevel cut into the bottom front edge.</p>
+    <p class="lede">This shows the actual STL files: six mitred face shells in translucent resin, each holding one 65 × 66 mm WS2812 panel. The light cells fan out from the LEDs so the pixels cover 80 mm of each 89.6 mm face. Drag to turn the cube and use the slider to pull it apart. The clear USB-C socket and green slide switch sit on a 45° bevel cut into the bottom front edge.</p>
   </header>
 
   <div class="stage" id="stage">
@@ -164,7 +164,11 @@ code { font-family: var(--font-mono); font-size: 13px; }
   const shellMat = new THREE.MeshPhysicalMaterial({ color: 0xe9f1f6, roughness: 0.55, metalness: 0, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide });
   const shellSolid = new THREE.MeshStandardMaterial({ color: 0xd9e4ec, roughness: 0.45 });
   const pcbMat = new THREE.MeshStandardMaterial({ color: 0x141619, roughness: 0.6 });
-  const usbMat = new THREE.MeshStandardMaterial({ color: 0xff9a55, roughness: 0.5 });
+  // USB-C socket: clear overmould, metal receptacle, red and black leads
+  const usbMat = new THREE.MeshPhysicalMaterial({ color: 0xf4f8fb, roughness: 0.2, transmission: 0, transparent: true, opacity: 0.6, depthWrite: false });
+  const metalMat = new THREE.MeshStandardMaterial({ color: 0xc4c8cd, metalness: 0.9, roughness: 0.3 });
+  const redMat = new THREE.MeshStandardMaterial({ color: 0xd0362b, roughness: 0.5 });
+  const blackMat = new THREE.MeshStandardMaterial({ color: 0x1c1d20, roughness: 0.5 });
   const swMat = new THREE.MeshStandardMaterial({ color: 0x4fdc98, roughness: 0.5 });
 
   const faceGroups = [];
@@ -207,9 +211,11 @@ code { font-family: var(--font-mono); font-size: 13px; }
       g.add(lens, glow, skin); lensMeshes.push(lens); glowMeshes.push(glow); skinMeshes.push(skin);
       g.userData.normal = new THREE.Vector3(0, 0, 1).applyEuler(g.rotation);
       if (name === 'front') {
-        const [u, s] = await Promise.all([load('part_usb_c_socket.stl'), load('part_slide_switch_ss12f15.stl')]);
+        const [u, m, lb, lr, s] = await Promise.all(['part_usb_c_socket.stl', 'part_usb_c_metal.stl', 'part_usb_c_lead_black.stl',
+          'part_usb_c_lead_red.stl', 'part_slide_switch_ss12f15.stl'].map(load));
         // parts are exported in cube coordinates; front shell has no rotation
-        g.add(new THREE.Mesh(u, usbMat), new THREE.Mesh(s, swMat));
+        const housing = new THREE.Mesh(u, usbMat); housing.renderOrder = 4;
+        g.add(housing, new THREE.Mesh(m, metalMat), new THREE.Mesh(lb, blackMat), new THREE.Mesh(lr, redMat), new THREE.Mesh(s, swMat));
       }
       cube.add(g); faceGroups.push(g);
     }

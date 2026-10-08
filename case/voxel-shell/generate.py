@@ -238,14 +238,59 @@ def port_cut():
     return bevel_place(cut)
 
 
-def usb_socket_model():
-    """Reference model of the USB-C socket, placed in cube coordinates."""
+def rounded_rect(w, h, r, depth):
+    """Rounded rectangle prism, centred in XY, extruded along +Z from 0 to depth."""
+    c = Manifold.cylinder(depth, r, r, SEG)
+    return Manifold.batch_hull([c.translate([sx * (w / 2 - r), sy * (h / 2 - r), 0]) for sx in (-1, 1) for sy in (-1, 1)])
+
+
+USB_C_PORT = (8.94, 3.26)  # USB-C receptacle opening (standard)
+USB_LEAD_D = 1.2  # lead outer diameter
+USB_LEAD_LEN = 5.5  # lead stubs drawn behind the body (they continue into the cube)
+
+
+def usb_socket_parts():
+    """Reference model of the snap-in USB-C socket, as separate parts for colouring.
+
+    Facet frame first (front face of the flange at OUTER + flange thickness),
+    then moved onto the bevel. Sizes from the supplier drawing: flange
+    15.8 x 9.3 x 2.0, 11.0 deep overall, 15.6 across the snap wings.
+    """
     fw, fh, ft = USB_FLANGE
-    flange = box(USB_X - fw / 2, USB_X + fw / 2, -fh / 2, fh / 2, OUTER, OUTER + ft)
+    front = OUTER + ft
+    back = front - USB_BODY_DEPTH - ft
     bw, bh = USB_CUTOUT[0] - 0.4, USB_CUTOUT[1] - 0.4
-    body = box(USB_X - bw / 2, USB_X + bw / 2, -bh / 2, bh / 2, OUTER + ft - USB_BODY_DEPTH - ft, OUTER)
-    mouth = rounded_slot(8.4, 2.6, 7.0).translate([USB_X, 0, OUTER + ft - 7.0 + 0.01])
-    return bevel_place(flange + body - mouth)
+    # clear housing: rounded flange + rounded body
+    housing = rounded_rect(fw, fh, 2.6, ft).translate([USB_X, 0, OUTER])
+    housing = housing + rounded_rect(bw, bh, 1.4, OUTER - back).translate([USB_X, 0, back])
+    # snap wings: thin ramps on both sides, widest just behind the 1.6 mm wall
+    wing_z0, wing_z1 = OUTER - USB_WALL - 0.2, OUTER - USB_WALL - 3.6
+    for sx in (-1, 1):
+        x_in = USB_X + sx * bw / 2
+        x_out = USB_X + sx * 15.6 / 2
+        pts = []
+        for y in (-1.8, 1.8):
+            pts += [[x_in, y, wing_z0], [x_out, y, wing_z0], [x_in, y, wing_z1]]
+        housing = housing + Manifold.hull_points(np.array(pts))
+    pw, ph = USB_C_PORT
+    mouth = rounded_slot(pw, ph, 7.0).translate([USB_X, 0, front - 7.0 + 0.01])
+    housing = housing - mouth
+    # metal receptacle shell and the tongue inside it
+    shell = rounded_slot(pw, ph, 6.6) - rounded_slot(pw - 0.5, ph - 0.5, 6.7).translate([0, 0, -0.05])
+    tongue = box(-3.3, 3.3, -0.35, 0.35, 0, 5.2)
+    metal = (shell + tongue).translate([USB_X, 0, front - 6.6 - 0.05])
+    # leads: black and red, side by side, out of the back of the body
+    leads = {}
+    for colour, dx in (("black", -1.5), ("red", 1.5)):
+        r = USB_LEAD_D / 2
+        leads[colour] = Manifold.cylinder(USB_LEAD_LEN + 0.5, r, r, SEG).translate([USB_X + dx, 0, back - USB_LEAD_LEN])
+    parts = {"housing": housing, "metal": metal, "lead_black": leads["black"], "lead_red": leads["red"]}
+    return {k: bevel_place(v) for k, v in parts.items()}
+
+
+def usb_socket_model():
+    """The whole USB-C socket as one solid, placed in cube coordinates (for fit checks)."""
+    return sum_all(list(usb_socket_parts().values()))
 
 
 def switch_model():
@@ -322,7 +367,13 @@ def main():
         print(f"{fname:24s} watertight={t.is_watertight} volume={t.volume / 1000:.1f} cm3 "
               f"bbox={np.round(t.extents, 2)}")
 
-    for fname, m in (("part_usb_c_socket.stl", usb_socket_model()), ("part_slide_switch_ss12f15.stl", switch_model())):
+    refs = {"part_usb_c_socket.stl": None, "part_slide_switch_ss12f15.stl": switch_model()}
+    usb = usb_socket_parts()
+    refs["part_usb_c_socket.stl"] = usb["housing"]
+    refs["part_usb_c_metal.stl"] = usb["metal"]
+    refs["part_usb_c_lead_black.stl"] = usb["lead_black"]
+    refs["part_usb_c_lead_red.stl"] = usb["lead_red"]
+    for fname, m in refs.items():
         to_trimesh(m).export(os.path.join(out, fname))
         print(f"{fname:24s} (reference only, placed in cube coordinates)")
     cube = sum_all(list(placed.values()))
