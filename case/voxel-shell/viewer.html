@@ -60,6 +60,7 @@ code { font-family: var(--font-mono); font-size: 13px; }
     <div class="controls">
       <div class="group"><label for="explode">Explode</label><input type="range" id="explode" min="0" max="1" step="0.01" value="0"></div>
       <div class="group">
+        <button class="tog" id="t-plasma" aria-pressed="false">Plasma</button>
         <button class="tog" id="t-leds" aria-pressed="true">LEDs</button>
         <button class="tog" id="t-clear" aria-pressed="true">Translucent</button>
         <button class="tog" id="t-port" aria-pressed="false">Port close-up</button>
@@ -227,10 +228,33 @@ code { font-family: var(--font-mono); font-size: 13px; }
   const WATER = new THREE.Color(100 / 255, 180 / 255, 255 / 255), OFF = new THREE.Color(0x2a2e33), tmp = new THREE.Color();
   let ledsOn = true, explode = 0, spin = !matchMedia('(prefers-reduced-motion: reduce)').matches;
   const gLocal = new THREE.Vector3(), inv = new THREE.Quaternion();
+  // Plasma: classic sum of sines, but sampled at each pixel's 3D position on the cube surface,
+  // so one continuous pattern flows over all six faces and across the edges.
+  let plasma = false;
+  const plasmaColor = new THREE.Color();
+  function plasmaAt(x, y, z, t, out) {
+    const f = 0.05; // one sine period is about 125 mm, so a blob spans most of a face
+    const v = Math.sin(x * f + t * 1.1)
+      + Math.sin(y * f * 1.3 - t * 0.9)
+      + Math.sin(z * f * 0.8 + t * 1.3)
+      + Math.sin(Math.hypot(x + 20 * Math.sin(t * 0.4), y + 20 * Math.cos(t * 0.5), z) * f * 1.2 - t * 1.5)
+      + Math.sin((x + y + z) * f * 0.7 + t * 0.6);
+    // hue follows the sum smoothly (the sum of five sines rarely leaves about +-3), so neighbouring pixels blend
+    out.setHSL(((v * 0.17 + t * 0.03) % 1 + 1) % 1, 1, 0.5).convertSRGBToLinear();
+    return 0.75 + 0.35 * Math.sin(v * 1.5); // brightness 0.4..1.1, so the pattern also pulses in intensity
+  }
   function updateLeds(t) {
     inv.copy(cube.quaternion).invert(); gLocal.set(0, -1, 0).applyQuaternion(inv);
     for (let n = 0; n < pixels.length; n++) {
       const p = pixels[n];
+      if (plasma) {
+        if (!ledsOn) { lensMeshes[p.face].setColorAt(p.mesh, OFF); glowMeshes[p.face].setColorAt(p.mesh, tmp.setRGB(0, 0, 0)); skinMeshes[p.face].setColorAt(p.mesh, SKIN_OFF); continue; }
+        const k = plasmaAt(p.pos.x, p.pos.y, p.pos.z, t, plasmaColor);
+        lensMeshes[p.face].setColorAt(p.mesh, tmp.copy(plasmaColor).multiplyScalar(0.6 + k * 0.6));
+        glowMeshes[p.face].setColorAt(p.mesh, tmp.copy(plasmaColor).multiplyScalar(k * 0.9));
+        skinMeshes[p.face].setColorAt(p.mesh, tmp.copy(SKIN_OFF).lerp(plasmaColor, 0.85).multiplyScalar(0.55 + 0.45 * k));
+        continue;
+      }
       const dpt = p.pos.dot(gLocal) - H * 0.15 + Math.sin(p.pos.x * 0.18 + t * 1.7) * 2.2 + Math.cos(p.pos.z * 0.21 - t * 1.3) * 2;
       const b = ledsOn && dpt > 0 ? Math.min(1, 0.45 + dpt / 25 + (dpt < 6 ? 0.3 : 0)) : 0;
       lensMeshes[p.face].setColorAt(p.mesh, b ? tmp.copy(WATER).multiplyScalar(0.6 + b * 0.6) : OFF);
@@ -251,6 +275,7 @@ code { font-family: var(--font-mono); font-size: 13px; }
   ['pointerup', 'pointercancel'].forEach(ev => el.addEventListener(ev, () => dragging = false));
 
   const bind = (id, fn) => { const b = document.getElementById(id); b.addEventListener('click', () => { const v = fn(); b.setAttribute('aria-pressed', String(v)); }); return b; };
+  bind('t-plasma', () => (plasma = !plasma));
   bind('t-leds', () => (ledsOn = !ledsOn));
   bind('t-clear', () => { const clear = faceGroups[0] && faceGroups[0].userData.shell.material !== shellMat;
     faceGroups.forEach(g => g.userData.shell.material = clear ? shellMat : shellSolid);

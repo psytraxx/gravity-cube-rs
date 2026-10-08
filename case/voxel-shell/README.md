@@ -90,6 +90,9 @@ cd case/voxel-shell && python3 -m http.server 8000
 # open http://localhost:8000/viewer.html
 ```
 
+The viewer's **Plasma** button swaps the water for one big plasma animation that
+flows over all six faces and across the edges.
+
 `../concepts.html` compares the five frame concepts considered (Edge Rails,
 Corner Bumpers, Lantern Cage, Pinwheel, Voxel Shell) and opens directly.
 
