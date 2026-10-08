@@ -72,10 +72,10 @@ code { font-family: var(--font-mono); font-size: 13px; }
   <div class="dims">
     <div class="dim"><span class="n">89.6 mm</span><span class="l">Outer cube edge</span></div>
     <div class="dim"><span class="n">80 mm</span><span class="l">Lit area per face: funnel cells fan out from the LEDs, leaving a 4.8 mm rim</span></div>
-    <div class="dim"><span class="n">7.5 mm</span><span class="l">From PCB to diffuser skin (light depth)</span></div>
-    <div class="dim"><span class="n">1.2 mm</span><span class="l">Diffuser skin over each pixel</span></div>
+    <div class="dim"><span class="n">7.9 mm</span><span class="l">From PCB to diffuser skin (light depth)</span></div>
+    <div class="dim"><span class="n">0.8 mm</span><span class="l">Diffuser skin over each pixel</span></div>
     <div class="dim"><span class="n">1.6 mm</span><span class="l">Grid walls, 0.76 mm clear of each LED</span></div>
-    <div class="dim"><span class="n">≈ 31 cm³</span><span class="l">Resin per shell</span></div>
+    <div class="dim"><span class="n">≈ 29 cm³</span><span class="l">Resin per shell</span></div>
   </div>
 
   <div class="cols">
@@ -119,7 +119,7 @@ code { font-family: var(--font-mono); font-size: 13px; }
   const S = 65, H = S / 2, T = 1.6, PITCH = S / 8;
   const PCB_X = 65, PCB_Y = 66, Z_BACK = PCB_Y / 2 + 1.5, Z_PCB = Z_BACK + T;
   // funnel cells (mirrors generate.py): LED grid on the PCB -> 80 mm lit span at the skin
-  const Z_SKIN = Z_PCB + 7.5, LIT = 80, WALL = 1.6, PORT_COLS = [2, 3, 4, 5], PORT_ROWS = 1, PORT_EDGE = 36;
+  const Z_SKIN = Z_PCB + 7.9, LIT = 80, WALL = 1.6, PORT_COLS = [2, 3, 4, 5], PORT_ROWS = 1, PORT_EDGE = 36;
   const PORT_SIDE = { front: -1, bottom: 1 };
   function skinCells(side) {
     const led = [...Array(9)].map((_, k) => -H + k * PITCH);
@@ -198,8 +198,8 @@ code { font-family: var(--font-mono); font-size: 13px; }
       for (const c of skinCells(PORT_SIDE[name] || 0)) {
         const x = (c.i + 0.5) * PITCH - H, y = (c.j + 0.5) * PITCH - H;
         d.position.set(x, y, Z_PCB + 1.6); d.scale.set(1, 1, 1); d.updateMatrix(); lens.setMatrixAt(k, d.matrix);
-        // pixel sits just outside the 1.2 mm skin, so it shows in both shell modes
-        d.position.set(c.x, c.y, Z_SKIN + 1.2 + 0.05); d.scale.set(c.w * 1.25, c.h * 1.25, 1); d.updateMatrix(); glow.setMatrixAt(k, d.matrix);
+        // pixel sits just outside the 0.8 mm skin, so it shows in both shell modes
+        d.position.set(c.x, c.y, Z_SKIN + 0.8 + 0.05); d.scale.set(c.w * 1.25, c.h * 1.25, 1); d.updateMatrix(); glow.setMatrixAt(k, d.matrix);
         pixels.push({ pos: new THREE.Vector3(c.x, c.y, Z_SKIN).applyEuler(g.rotation), mesh: k, face: faceGroups.length });
         k++;
       }

@@ -106,7 +106,7 @@ for fname in ("shell.stl", "shell_port_front.stl", "shell_port_bottom.stl"):
     # wall thickness = distance to an opposite, near-parallel surface (45 degree edges are not walls)
     opp = (tm.face_normals[ti] * nn[ri]).sum(1) < -0.9
     thinnest = float(d[opp].min())
-    check(f"{fname} thinnest wall {thinnest:.2f} mm (must be >= {g.MIN_WALL})", g.MIN_WALL - thinnest if thinnest < g.MIN_WALL else 0.0)
+    check(f"{fname} thinnest wall {thinnest:.2f} mm (must be >= {g.MIN_WALL})", g.MIN_WALL - thinnest if thinnest < g.MIN_WALL - 0.005 else 0.0)  # 0.005 mm for float rounding
 
 print("== wiring")
 edge_channel = g.box(-20, 20, -g.Z_BACK, -g.HMAX, g.HMAX, g.Z_BACK)
