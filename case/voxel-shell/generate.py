@@ -42,11 +42,12 @@ WALL = 1.6  # grid wall thickness (measured along the face)
 # Funnel cells: each LED's cell starts at the LED grid on the PCB and widens
 # towards the skin, so the 8 x 8 pixels spread over LIT_SPAN of the outer face.
 LIT_SPAN = 80.0  # lit width on the outside of each face (89.6 mm face -> 4.8 mm rim)
-# Along the port edge the cells above the USB-C socket and switch cannot
-# spread: in PORT_COLS the first PORT_ROWS rows share the space between the
-# straight LED-grid edge and the normal funnel row line instead.
-PORT_COLS = (2, 3, 4, 5)
-PORT_ROWS = 3
+# Along the port edge the cells above the USB-C socket cannot spread all the
+# way: in PORT_COLS the first PORT_ROWS rows share the space between
+# PORT_EDGE and the normal funnel row line instead.
+PORT_COLS = (2, 3)  # above the USB-C socket; the switch is small enough for full cells
+PORT_EDGE = 37.0  # how far (from the face centre) those cells may reach at the skin
+PORT_ROWS = 1  # only the outermost row is shortened
 CLAMP_RING = 0.6  # width of the ring that presses on the PCB margin
 
 H = GRID_SPAN / 2  # half of the LED grid (32.5)
@@ -67,7 +68,14 @@ PIN_ALONG = 25.0  # pin positions along each edge: +-PIN_ALONG
 PIN_AT = 37.0  # where the pin axis meets the mitre (x = z = PIN_AT)
 
 # ---------------------------------------------------------------- USB-C + switch (cube coordinates; front = +Z, bottom = -Y)
-# Both sit in the border of the front face along the bottom edge.
+# Both sit on a 45 degree bevel cut into the bottom front edge, an inset
+# facet BEVEL_S deep (measured square to the facet) that stays inside the
+# unlit rim. The parts point diagonally into the wedge between the front
+# and bottom panels. Part geometry below is written as if the facet were a
+# front face at z = OUTER with its centre line at y = 0; bevel_place() turns
+# it onto the facet.
+BEVEL_S = 2.5  # facet depth from the edge; meets each face BEVEL_S * sqrt(2) from the edge
+BEVEL_X = (-21.0, 21.0)  # facet length along the edge
 #
 # USB-C: snap-in socket with flying leads. Flange 15.8 x 9.3 x 2.0, body 9.0
 # deep behind it. The flange stays on the outside; the body goes through a
@@ -77,7 +85,7 @@ USB_FLANGE = (15.8, 9.3, 2.0)
 USB_BODY_DEPTH = 9.0
 USB_CUTOUT = (14.6, 8.2)  # check against your socket's body; flange laps 0.6 mm
 USB_WALL = 1.6
-USB_X = -9.5  # socket centre along the edge
+USB_X = -9.2  # socket centre along the edge
 # Slide switch: SS12F15-style, plate 19.6 x 5.5 with M2 holes 11.5 apart,
 # 7.8 mm from the plate to the pin tips, 3 mm lever travel.
 SW_PLATE = (19.6, 5.5)
@@ -87,12 +95,12 @@ SW_BODY_W = 8.6  # switch body length behind the plate
 SW_HOLE_PITCH = 11.5
 SW_SCREW_D = 2.2  # M2 screws through the wall (set 0 to glue instead)
 SW_SLOT = (6.6, 3.4)  # lever opening: 3 mm travel + lever + clearance
-SW_WALL = 1.2
-SW_X = 9.6
+SW_WALL = 1.0
+SW_X = 10.0
 PART_FIT = 0.2  # clearance per side
-PORT_FLOOR = 1.2  # wall left above the bottom face
-PORT_TOP = -(HMAX + FIT + 0.6)  # keep clear of the front panel pocket
-WIRE_Z = HMAX + 0.3  # wire channels stop here, just in front of the bottom panel edge
+SW_BODY_H = 3.6  # switch body height across the facet
+WIRE_SLOT = (8.0, 1.4)  # wire channel from each pocket into the cube, along the diagonal
+WIRE_LEN = 6.0  # how far the wire channel runs past the back of each pocket
 
 SEG = 48
 
@@ -155,8 +163,8 @@ def _cell(xb, yb, xt, yt):
 
 
 def face_shell(port_side=0):
-    """One mitred face shell. port_side = -1 / +1 keeps straight cells along the
-    -Y / +Y edge in PORT_COLS, leaving room for the USB-C socket and switch."""
+    """One mitred face shell. port_side = -1 / +1 shortens the outer cells along the
+    -Y / +Y edge in PORT_COLS, leaving room for the USB-C socket."""
     s = frustum()
     ax, ay = HX + FIT, HY + FIT
     # PCB pocket
@@ -181,11 +189,11 @@ def light_cells(port_side=0):
         if port_side and i in PORT_COLS:
             n = PORT_ROWS
             if port_side < 0:
-                lo, hi = led[0], yt_all[n]
+                lo, hi = -PORT_EDGE, yt_all[n]
                 for k in range(n + 1):
                     yt[k] = lo + k * (hi - lo) / n
             else:
-                lo, hi = yt_all[8 - n], led[8]
+                lo, hi = yt_all[8 - n], PORT_EDGE
                 for k in range(n + 1):
                     yt[8 - n + k] = lo + k * (hi - lo) / n
         for j in range(8):
@@ -193,64 +201,65 @@ def light_cells(port_side=0):
     return cells
 
 
-def port_band():
-    y0 = -OUTER + PORT_FLOOR
-    return y0, PORT_TOP, (y0 + PORT_TOP) / 2
+def bevel_place(m):
+    """Move geometry from the facet frame (surface at z = OUTER, centre line y = 0) onto the bevel."""
+    c = OUTER - BEVEL_S / math.sqrt(2)
+    return m.translate([0, 0, -OUTER]).rotate([45, 0, 0]).translate([0, -c, c])
 
 
 def port_cut():
-    """USB-C socket + slide switch cavities in cube coordinates."""
-    y0, y1, yc = port_band()
+    """Bevel, USB-C socket and slide switch cavities in cube coordinates."""
     f = PART_FIT
+    cut = box(BEVEL_X[0], BEVEL_X[1], -30, 30, OUTER, OUTER + 30)
     # USB-C: cut-out through the wall, wider pocket behind for body and snap wings
     cw, ch = USB_CUTOUT
-    cut = box(USB_X - cw / 2, USB_X + cw / 2, yc - ch / 2, yc + ch / 2, OUTER - USB_WALL - 1, OUTER + 1)
+    cut = cut + box(USB_X - cw / 2, USB_X + cw / 2, -ch / 2, ch / 2, OUTER - USB_WALL - 1, OUTER + 1)
     pw = USB_FLANGE[0] + 2 * f
     usb_back = OUTER - USB_WALL - USB_BODY_DEPTH + USB_FLANGE[2] - 0.5
-    cut = cut + box(USB_X - pw / 2, USB_X + pw / 2, y0, y1, usb_back, OUTER - USB_WALL)
+    cut = cut + box(USB_X - pw / 2, USB_X + pw / 2, -ch / 2 - f, ch / 2 + f, usb_back, OUTER - USB_WALL)
     # switch: plate sits against the inside of a thin wall, lever through a slot
     sw, sh = SW_PLATE[0] + 2 * f, SW_PLATE[1] + 2 * f
     plate = OUTER - SW_WALL
     sw_back = plate - SW_DEPTH - 0.4
-    # full width only for the thin mounting plate; the body behind it is narrower
-    cut = cut + box(SW_X - sw / 2, SW_X + sw / 2, yc - sh / 2, yc + sh / 2, plate - SW_PLATE_T - 0.4, plate)
-    cut = cut + box(SW_X - SW_BODY_W / 2 - f, SW_X + SW_BODY_W / 2 + f, yc - sh / 2, yc + sh / 2, sw_back, plate)
+    # full width only for the thin mounting plate; the body behind it is smaller
+    cut = cut + box(SW_X - sw / 2, SW_X + sw / 2, -sh / 2, sh / 2, plate - SW_PLATE_T - 0.2, plate)
+    bh = SW_BODY_H / 2 + f
+    cut = cut + box(SW_X - SW_BODY_W / 2 - f, SW_X + SW_BODY_W / 2 + f, -bh, bh, sw_back, plate)
     cut = cut + box(SW_X - SW_SLOT[0] / 2, SW_X + SW_SLOT[0] / 2,
-                    yc - SW_SLOT[1] / 2, yc + SW_SLOT[1] / 2, plate - 1, OUTER + 1)
+                    -SW_SLOT[1] / 2, SW_SLOT[1] / 2, plate - 1, OUTER + 1)
     if SW_SCREW_D:
         for dx in (-SW_HOLE_PITCH / 2, SW_HOLE_PITCH / 2):
             cut = cut + Manifold.cylinder(SW_WALL + 2, SW_SCREW_D / 2, SW_SCREW_D / 2, SEG).translate(
-                [SW_X + dx, yc, plate - 1])
-    # wire channels from both parts into the open edge channel / cube interior
-    for x0, x1, zb in ((USB_X - 5, USB_X + 5, usb_back), (SW_X - 3, SW_X + 3, sw_back)):
-        cut = cut + box(x0, x1, y0 + 1.5, -HMAX, WIRE_Z, zb + 0.01)
-    return cut
+                [SW_X + dx, 0, plate - 1])
+    # wire channels: straight on from the back of each pocket, between the two panels, into the cube
+    ww, wh = WIRE_SLOT
+    for x, zb in ((USB_X, usb_back), (SW_X, sw_back)):
+        cut = cut + box(x - ww / 2, x + ww / 2, -wh / 2, wh / 2, zb - WIRE_LEN, zb + 0.01)
+    return bevel_place(cut)
 
 
 def usb_socket_model():
     """Reference model of the USB-C socket, placed in cube coordinates."""
-    _, _, yc = port_band()
     fw, fh, ft = USB_FLANGE
-    flange = box(USB_X - fw / 2, USB_X + fw / 2, yc - fh / 2, yc + fh / 2, OUTER, OUTER + ft)
+    flange = box(USB_X - fw / 2, USB_X + fw / 2, -fh / 2, fh / 2, OUTER, OUTER + ft)
     bw, bh = USB_CUTOUT[0] - 0.4, USB_CUTOUT[1] - 0.4
-    body = box(USB_X - bw / 2, USB_X + bw / 2, yc - bh / 2, yc + bh / 2, OUTER + ft - USB_BODY_DEPTH - ft, OUTER)
-    mouth = rounded_slot(8.4, 2.6, 7.0).translate([USB_X, yc, OUTER + ft - 7.0 + 0.01])
-    return flange + body - mouth
+    body = box(USB_X - bw / 2, USB_X + bw / 2, -bh / 2, bh / 2, OUTER + ft - USB_BODY_DEPTH - ft, OUTER)
+    mouth = rounded_slot(8.4, 2.6, 7.0).translate([USB_X, 0, OUTER + ft - 7.0 + 0.01])
+    return bevel_place(flange + body - mouth)
 
 
 def switch_model():
     """Reference model of the SS12F15 slide switch, placed in cube coordinates."""
-    _, _, yc = port_band()
     plate_z = OUTER - SW_WALL
     pw, ph = SW_PLATE
-    plate = box(SW_X - pw / 2, SW_X + pw / 2, yc - ph / 2, yc + ph / 2, plate_z - 0.5, plate_z)
+    plate = box(SW_X - pw / 2, SW_X + pw / 2, -ph / 2, ph / 2, plate_z - 0.5, plate_z)
     for dx in (-SW_HOLE_PITCH / 2, SW_HOLE_PITCH / 2):
-        plate = plate - Manifold.cylinder(2, 1.0, 1.0, SEG).translate([SW_X + dx, yc, plate_z - 1])
-    body = box(SW_X - 4.3, SW_X + 4.3, yc - 1.8, yc + 1.8, plate_z - 5.5, plate_z - 0.5)
-    pins = sum_all([box(SW_X + dx - 0.4, SW_X + dx + 0.4, yc - 0.25, yc + 0.25, plate_z - SW_DEPTH, plate_z - 5.5)
+        plate = plate - Manifold.cylinder(2, 1.0, 1.0, SEG).translate([SW_X + dx, 0, plate_z - 1])
+    body = box(SW_X - SW_BODY_W / 2, SW_X + SW_BODY_W / 2, -SW_BODY_H / 2, SW_BODY_H / 2, plate_z - 5.5, plate_z - 0.5)
+    pins = sum_all([box(SW_X + dx - 0.4, SW_X + dx + 0.4, -0.25, 0.25, plate_z - SW_DEPTH, plate_z - 5.5)
                     for dx in (-3, 0, 3)])
-    lever = box(SW_X - 1.5 - 1.2, SW_X - 1.5 + 1.2, yc - 1.0, yc + 1.0, plate_z, OUTER + 2.5)
-    return plate + body + pins + lever
+    lever = box(SW_X - 1.5 - 1.2, SW_X - 1.5 + 1.2, -1.0, 1.0, plate_z, OUTER + 2.5)
+    return bevel_place(plate + body + pins + lever)
 
 
 FIT_TEST_HEIGHT = 2.0  # grid wall height kept in the fit-test piece
