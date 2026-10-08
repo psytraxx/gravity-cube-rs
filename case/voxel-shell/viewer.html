@@ -31,7 +31,7 @@ h1 { font-family: var(--font-display); font-stretch: 112%; font-weight: 800; fon
 .tog:focus-visible, input:focus-visible { outline: 2px solid #5aaee8; outline-offset: 2px; }
 input[type=range] { width: 110px; accent-color: #5aaee8; }
 .hud { position: absolute; left: 14px; right: 14px; bottom: 12px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font: 12px var(--font-mono); color: var(--studio-fg); pointer-events: none; }
-.hud .k { color: #ff9a55; } .hud .s { color: #4fdc98; }
+.hud .k { color: #dfe7ee; } .hud .s { color: #4fdc98; }
 #loading { position: absolute; inset: 0; display: grid; place-items: center; font: 13px var(--font-mono); color: var(--studio-fg); }
 .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; min-width: 0; display: grid; gap: 10px; align-content: start; }
@@ -52,7 +52,7 @@ code { font-family: var(--font-mono); font-size: 13px; }
 <div class="wrap">
   <header>
     <h1>Voxel Shell</h1>
-    <p class="lede">This shows the actual STL files: six mitred face shells in translucent resin, each holding one 65 × 66 mm WS2812 panel. Drag to turn the cube and use the slider to pull it apart. The orange USB-C socket and green slide switch sit on the bottom front edge.</p>
+    <p class="lede">This shows the actual STL files: six mitred face shells in translucent resin, each holding one 65 × 66 mm WS2812 panel. The light cells fan out from the LEDs so the pixels cover 80 mm of each 89.6 mm face. Drag to turn the cube and use the slider to pull it apart. The clear USB-C socket and green slide switch sit on a 45° bevel cut into the bottom front edge.</p>
   </header>
 
   <div class="stage" id="stage">
@@ -71,10 +71,11 @@ code { font-family: var(--font-mono); font-size: 13px; }
 
   <div class="dims">
     <div class="dim"><span class="n">89.6 mm</span><span class="l">Outer cube edge</span></div>
+    <div class="dim"><span class="n">80 mm</span><span class="l">Lit area per face: funnel cells fan out from the LEDs, leaving a 4.8 mm rim</span></div>
     <div class="dim"><span class="n">7.5 mm</span><span class="l">From PCB to diffuser skin (light depth)</span></div>
     <div class="dim"><span class="n">1.2 mm</span><span class="l">Diffuser skin over each pixel</span></div>
     <div class="dim"><span class="n">1.6 mm</span><span class="l">Grid walls, 0.76 mm clear of each LED</span></div>
-    <div class="dim"><span class="n">≈ 36 cm³</span><span class="l">Resin per shell</span></div>
+    <div class="dim"><span class="n">≈ 31 cm³</span><span class="l">Resin per shell</span></div>
   </div>
 
   <div class="cols">
@@ -96,7 +97,7 @@ code { font-family: var(--font-mono); font-size: 13px; }
         <tr><td>1 ×</td><td>Snap-in USB-C socket with leads (flange 15.8 × 9.3, 11 mm deep)</td></tr>
         <tr><td>1 ×</td><td>SS12F15 slide switch (19.6 × 5.5 plate)</td></tr>
         <tr><td>2 ×</td><td>M2 × 4 screw + nut for the switch, or glue it</td></tr>
-        <tr><td>24 ×</td><td>2 mm dowel, about 7 mm long (1.75 mm filament works)</td></tr>
+        <tr><td>24 ×</td><td>2 mm dowel, about 5.5 mm long (1.75 mm filament works)</td></tr>
       </table>
     </section>
     <section class="card">
@@ -117,6 +118,24 @@ code { font-family: var(--font-mono); font-size: 13px; }
 (() => {
   const S = 65, H = S / 2, T = 1.6, PITCH = S / 8;
   const PCB_X = 65, PCB_Y = 66, Z_BACK = PCB_Y / 2 + 1.5, Z_PCB = Z_BACK + T;
+  // funnel cells (mirrors generate.py): LED grid on the PCB -> 80 mm lit span at the skin
+  const Z_SKIN = Z_PCB + 7.5, LIT = 80, WALL = 1.6, PORT_COLS = [2, 3], PORT_ROWS = 1, PORT_EDGE = 37;
+  const PORT_SIDE = { front: -1, bottom: 1 };
+  function skinCells(side) {
+    const led = [...Array(9)].map((_, k) => -H + k * PITCH);
+    const fun = [...Array(9)].map((_, k) => -LIT / 2 + k * LIT / 8);
+    const out = [];
+    for (let i = 0; i < 8; i++) {
+      const yt = fun.slice();
+      if (side && PORT_COLS.includes(i)) {
+        const n = PORT_ROWS;
+        if (side < 0) { const lo = -PORT_EDGE, hi = fun[n]; for (let k = 0; k <= n; k++) yt[k] = lo + k * (hi - lo) / n; }
+        else { const lo = fun[8 - n], hi = PORT_EDGE; for (let k = 0; k <= n; k++) yt[8 - n + k] = lo + k * (hi - lo) / n; }
+      }
+      for (let j = 0; j < 8; j++) out.push({ i, j, x: (fun[i] + fun[i + 1]) / 2, y: (yt[j] + yt[j + 1]) / 2, w: fun[i + 1] - fun[i] - WALL, h: yt[j + 1] - yt[j] - WALL });
+    }
+    return out;
+  }
   const FACES = [ // name, rotation (deg, single axis), file
     ['front', [0, 0, 0], 'shell_port_front.stl'],
     ['back', [180, 0, 0], 'shell.stl'],
@@ -133,7 +152,7 @@ code { font-family: var(--font-mono); font-size: 13px; }
   const scene = new THREE.Scene(); scene.background = new THREE.Color(0x15181c);
   const camera = new THREE.PerspectiveCamera(30, 1.6, 1, 3000);
   const HOME = { pos: new THREE.Vector3(0, 50, 330), at: new THREE.Vector3(0, 0, 0) };
-  const PORT = { pos: new THREE.Vector3(-10, -35, 240), at: new THREE.Vector3(0, -25, 20) };
+  const PORT = { pos: new THREE.Vector3(0, -150, 190), at: new THREE.Vector3(0, -38, 38) };
   let view = HOME;
   scene.add(new THREE.HemisphereLight(0xe4ecf5, 0x22252a, 0.8));
   const key = new THREE.DirectionalLight(0xffffff, 0.7); key.position.set(120, 200, 180); scene.add(key);
@@ -145,7 +164,11 @@ code { font-family: var(--font-mono); font-size: 13px; }
   const shellMat = new THREE.MeshPhysicalMaterial({ color: 0xe9f1f6, roughness: 0.55, metalness: 0, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide });
   const shellSolid = new THREE.MeshStandardMaterial({ color: 0xd9e4ec, roughness: 0.45 });
   const pcbMat = new THREE.MeshStandardMaterial({ color: 0x141619, roughness: 0.6 });
-  const usbMat = new THREE.MeshStandardMaterial({ color: 0xff9a55, roughness: 0.5 });
+  // USB-C socket: clear overmould, metal receptacle, red and black leads
+  const usbMat = new THREE.MeshPhysicalMaterial({ color: 0xf4f8fb, roughness: 0.2, transmission: 0, transparent: true, opacity: 0.6, depthWrite: false });
+  const metalMat = new THREE.MeshStandardMaterial({ color: 0xc4c8cd, metalness: 0.9, roughness: 0.3 });
+  const redMat = new THREE.MeshStandardMaterial({ color: 0xd0362b, roughness: 0.5 });
+  const blackMat = new THREE.MeshStandardMaterial({ color: 0x1c1d20, roughness: 0.5 });
   const swMat = new THREE.MeshStandardMaterial({ color: 0x4fdc98, roughness: 0.5 });
 
   const faceGroups = [];
@@ -155,11 +178,12 @@ code { font-family: var(--font-mono); font-size: 13px; }
   const deg = d => d * Math.PI / 180;
 
   // LED pixels for one face (local +Z), instanced so the glow can be animated
-  const lensGeo = new THREE.PlaneGeometry(5, 5), glowGeo = new THREE.PlaneGeometry(9.5, 9.5);
+  const lensGeo = new THREE.PlaneGeometry(5, 5), glowGeo = new THREE.PlaneGeometry(1, 1);
+  // soft-edged square: the lit pixel as seen through the diffuser skin
   const glowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
-    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
-  const pixels = []; const lensMeshes = [], glowMeshes = [];
+    g.filter = 'blur(5px)'; g.fillStyle = '#fff'; g.fillRect(9, 9, 46, 46); return new THREE.CanvasTexture(c); })();
+  const pixels = []; const lensMeshes = [], glowMeshes = [], skinMeshes = [];
+  let clearShell = true;
 
   async function build() {
     for (const [name, rot, file] of FACES) {
@@ -171,19 +195,27 @@ code { font-family: var(--font-mono); font-size: 13px; }
       const glow = new THREE.InstancedMesh(glowGeo, new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }), 64);
       glow.renderOrder = 3;
       const d = new THREE.Object3D(); let k = 0;
-      for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) {
-        const x = (i + 0.5) * PITCH - H, y = (j + 0.5) * PITCH - H;
-        d.position.set(x, y, Z_PCB + 1.6); d.updateMatrix(); lens.setMatrixAt(k, d.matrix);
-        d.position.set(x, y, Z_PCB + 7.5 + 1.25); d.updateMatrix(); glow.setMatrixAt(k, d.matrix);
-        pixels.push({ pos: new THREE.Vector3(x, y, Z_PCB).applyEuler(g.rotation), mesh: k, face: faceGroups.length });
+      for (const c of skinCells(PORT_SIDE[name] || 0)) {
+        const x = (c.i + 0.5) * PITCH - H, y = (c.j + 0.5) * PITCH - H;
+        d.position.set(x, y, Z_PCB + 1.6); d.scale.set(1, 1, 1); d.updateMatrix(); lens.setMatrixAt(k, d.matrix);
+        // pixel sits just outside the 1.2 mm skin, so it shows in both shell modes
+        d.position.set(c.x, c.y, Z_SKIN + 1.2 + 0.05); d.scale.set(c.w * 1.25, c.h * 1.25, 1); d.updateMatrix(); glow.setMatrixAt(k, d.matrix);
+        pixels.push({ pos: new THREE.Vector3(c.x, c.y, Z_SKIN).applyEuler(g.rotation), mesh: k, face: faceGroups.length });
         k++;
       }
-      g.add(lens, glow); lensMeshes.push(lens); glowMeshes.push(glow);
+      // solid-shell mode: pixels as coloured patches on the frosted skin (additive glow washes out on white)
+      const skin = new THREE.InstancedMesh(glowGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }), 64);
+      for (let n = 0; n < 64; n++) { glow.getMatrixAt(n, d.matrix); d.matrix.decompose(d.position, d.quaternion, d.scale);
+        d.scale.set(d.scale.x / 1.25, d.scale.y / 1.25, 1); d.updateMatrix(); skin.setMatrixAt(n, d.matrix); }
+      skin.visible = false;
+      g.add(lens, glow, skin); lensMeshes.push(lens); glowMeshes.push(glow); skinMeshes.push(skin);
       g.userData.normal = new THREE.Vector3(0, 0, 1).applyEuler(g.rotation);
       if (name === 'front') {
-        const [u, s] = await Promise.all([load('part_usb_c_socket.stl'), load('part_slide_switch_ss12f15.stl')]);
+        const [u, m, lb, lr, s] = await Promise.all(['part_usb_c_socket.stl', 'part_usb_c_metal.stl', 'part_usb_c_lead_black.stl',
+          'part_usb_c_lead_red.stl', 'part_slide_switch_ss12f15.stl'].map(load));
         // parts are exported in cube coordinates; front shell has no rotation
-        g.add(new THREE.Mesh(u, usbMat), new THREE.Mesh(s, swMat));
+        const housing = new THREE.Mesh(u, usbMat); housing.renderOrder = 4;
+        g.add(housing, new THREE.Mesh(m, metalMat), new THREE.Mesh(lb, blackMat), new THREE.Mesh(lr, redMat), new THREE.Mesh(s, swMat));
       }
       cube.add(g); faceGroups.push(g);
     }
@@ -191,6 +223,7 @@ code { font-family: var(--font-mono); font-size: 13px; }
   }
 
   // ---- animation / gravity fill ----
+  const SKIN_OFF = new THREE.Color(0xe4ecf2).convertSRGBToLinear();
   const WATER = new THREE.Color(100 / 255, 180 / 255, 255 / 255), OFF = new THREE.Color(0x2a2e33), tmp = new THREE.Color();
   let ledsOn = true, explode = 0, spin = !matchMedia('(prefers-reduced-motion: reduce)').matches;
   const gLocal = new THREE.Vector3(), inv = new THREE.Quaternion();
@@ -201,10 +234,12 @@ code { font-family: var(--font-mono); font-size: 13px; }
       const dpt = p.pos.dot(gLocal) - H * 0.15 + Math.sin(p.pos.x * 0.18 + t * 1.7) * 2.2 + Math.cos(p.pos.z * 0.21 - t * 1.3) * 2;
       const b = ledsOn && dpt > 0 ? Math.min(1, 0.45 + dpt / 25 + (dpt < 6 ? 0.3 : 0)) : 0;
       lensMeshes[p.face].setColorAt(p.mesh, b ? tmp.copy(WATER).multiplyScalar(0.6 + b * 0.6) : OFF);
-      glowMeshes[p.face].setColorAt(p.mesh, tmp.copy(WATER).multiplyScalar(b * 0.75));
+      glowMeshes[p.face].setColorAt(p.mesh, tmp.copy(WATER).multiplyScalar(b * 0.9));
+      skinMeshes[p.face].setColorAt(p.mesh, tmp.copy(SKIN_OFF).lerp(WATER, b ? 0.55 + 0.45 * b : 0));
     }
     lensMeshes.forEach(m => m.instanceColor && (m.instanceColor.needsUpdate = true));
     glowMeshes.forEach(m => m.instanceColor && (m.instanceColor.needsUpdate = true));
+    skinMeshes.forEach(m => m.instanceColor && (m.instanceColor.needsUpdate = true));
   }
 
   // ---- interaction ----
@@ -218,10 +253,11 @@ code { font-family: var(--font-mono); font-size: 13px; }
   const bind = (id, fn) => { const b = document.getElementById(id); b.addEventListener('click', () => { const v = fn(); b.setAttribute('aria-pressed', String(v)); }); return b; };
   bind('t-leds', () => (ledsOn = !ledsOn));
   bind('t-clear', () => { const clear = faceGroups[0] && faceGroups[0].userData.shell.material !== shellMat;
-    faceGroups.forEach(g => g.userData.shell.material = clear ? shellMat : shellSolid); return clear; });
+    faceGroups.forEach(g => g.userData.shell.material = clear ? shellMat : shellSolid);
+    clearShell = clear; glowMeshes.forEach(m => m.visible = clear); skinMeshes.forEach(m => m.visible = !clear); return clear; });
   const spinBtn = bind('t-spin', () => (spin = !spin)); spinBtn.setAttribute('aria-pressed', String(spin));
   bind('t-port', () => { const on = view !== PORT; view = on ? PORT : HOME;
-    if (on) { cube.quaternion.setFromEuler(new THREE.Euler(-0.25, 0.35, 0)); spin = false; spinBtn.setAttribute('aria-pressed', 'false'); }
+    if (on) { cube.quaternion.setFromEuler(new THREE.Euler(0, 0.35, 0)); spin = false; spinBtn.setAttribute('aria-pressed', 'false'); }
     return on; });
   document.getElementById('explode').addEventListener('input', e => explode = +e.target.value);
 

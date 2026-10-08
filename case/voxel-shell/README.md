@@ -4,9 +4,17 @@
 
 An 89.6 mm cube built from six identical face shells with 45° mitred edges.
 Each shell holds one 65 × 66 mm WS2812 8×8 panel (`../led_module.png`) in a
-pocket. In front of the panel sits an 8×8 light grid and a 1.2 mm diffuser
-skin, all printed as one translucent part. Every LED becomes a square pixel,
-and the edges glow too.
+pocket. In front of the panel sits an 8×8 grid of funnel-shaped light cells and
+a 1.2 mm diffuser skin, all printed as one translucent part. The cells start
+at the LEDs (8.125 mm pitch) and fan out to a 10 mm pitch, so the pixels fill
+80 mm of each 89.6 mm face with only a 4.8 mm rim at the edges.
+
+The USB-C socket and the switch sit on a 45° bevel cut into the bottom front
+edge: an inset facet 5 mm wide and 42 mm long that stays inside the unlit rim.
+Both parts point diagonally into the wedge between the front and bottom
+panels. Only the two cells directly above the socket (columns 2–3, outer row
+on the front and bottom faces) stop 3 mm short of the rim. Every other cell
+runs out to the rim.
 
 ## Files
 
@@ -16,7 +24,7 @@ and the edges glow too.
 | `shell_port_front.stl` | 1 | USB-C cut-out and switch slot along its bottom edge |
 | `shell_port_bottom.stl` | 1 | Matching relief for the port pockets; that edge faces the front shell |
 | `fit_test.stl` | 1 | Optional, order first: a 4.9 mm slice of a shell (pocket, rim, bottom of the grid) to test-fit a real panel cheaply |
-| `part_usb_c_socket.stl` | – | Reference model only (not printed) |
+| `part_usb_c_socket.stl`, `part_usb_c_metal.stl`, `part_usb_c_lead_*.stl` | – | Reference model of the USB-C socket: clear housing with snap wings, metal receptacle, red and black leads (not printed) |
 | `part_slide_switch_ss12f15.stl` | – | Reference model only (not printed) |
 | `assembly_preview.stl` | – | All six shells assembled, for checking fit |
 | `generate.py` | – | Parametric source; rebuilds every STL |
@@ -32,7 +40,7 @@ bead-blast the outside for an even frosted diffusion.
 - 1 × snap-in USB-C socket with leads: flange 15.8 × 9.3 × 2.0, 9.0 deep behind the flange
 - 1 × SS12F15 slide switch: plate 19.6 × 5.5, M2 holes 11.5 apart
 - 2 × M2 × 4 screw + nut for the switch, or glue it in
-- 24 × 2 mm dowel, about 7 mm long (1.75 mm filament works), for the mitre alignment holes
+- 24 × 2 mm dowel, about 5.5 mm long (1.75 mm filament works), for the mitre alignment holes
 
 ## Key dimensions
 
@@ -41,11 +49,13 @@ bead-blast the outside for an even frosted diffusion.
 | Outer cube | 89.6 |
 | PCB pocket | 65.5 × 66.5 × 1.6 (0.25 clearance per side) |
 | Gap from panel back to the neighbour's edge | 1.5 (leaves a wire channel along every edge) |
-| Grid walls | 1.6 thick, 0.76 clear of each LED (0.26 if the grid is 0.5 off-centre on the 66 side), stop 1.3 above the PCB (clears capacitors) |
+| Lit area | 80 × 80 per face, 10 mm pixel pitch, 4.8 mm rim |
+| Grid walls | 1.6 thick; vertical beside the LEDs (0.76 clear, 0.26 if the grid is 0.5 off-centre on the 66 side), then fanning out; stop 1.3 above the PCB (clears capacitors) |
 | PCB front to diffuser skin | 7.5 |
 | Clamp ring on the PCB margin | 0.6 (outer LEDs start 1.56 from the 65 mm edges) |
-| USB-C cut-out | 14.6 × 8.2 in a 1.6 wall; the flange stays on the outside |
-| Switch lever slot | 6.6 × 3.4 in a 1.2 wall |
+| Port bevel | 45°, 2.5 deep (5 mm facet), x = −21…21 on the bottom front edge |
+| USB-C cut-out | 14.6 × 8.2 in a 1.6 wall; the flange stays on the outside and overhangs the facet |
+| Switch lever slot | 6.6 × 3.4 in a 1.0 wall |
 
 `USB_CUTOUT` is an estimate: the drawing only gives the flange size. Measure
 the body of your socket behind the flange and change it in `generate.py`
@@ -56,8 +66,10 @@ before ordering.
 1. Press each panel into its shell, LEDs towards the grid. The pocket is
    65.5 × 66.5, so the 66 mm side goes along the long side of the pocket. A few dots of glue
    on the PCB rim hold it.
-2. Push the USB-C socket in from outside the front port shell. Screw or glue
-   the switch to the inside of the wall so its lever comes through the slot.
+2. Push the USB-C socket into the bevel from outside. Screw or glue the
+   switch to the inside of the bevel wall so its lever comes through the slot.
+   Both pockets are split between the front and bottom port shells, so fit
+   the parts after those two shells are joined.
 3. Wire the panels, ESP32 and battery. The channel along every edge (between
    panel backs and the neighbouring shells) carries wires from face to face,
    and both port pockets open into it.
