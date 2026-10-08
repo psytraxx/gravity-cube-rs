@@ -36,8 +36,8 @@ EDGE_MARGIN = 1.56  # 65 mm edge to the outer LED rows
 FIT = 0.25  # clearance around the PCB in its pocket (resin prints vary by ~0.1-0.2)
 PANEL_GAP = 1.5  # gap between the back of a panel and its neighbour's edge
 RELIEF = 1.3  # grid walls stop this far above the PCB (clears the capacitors)
-GRID_DEPTH = 7.5  # PCB front to diffuser skin (deep enough for the USB-C socket)
-SKIN = 1.2  # diffuser skin thickness
+GRID_DEPTH = 7.9  # PCB front to diffuser skin (deep enough for the USB-C socket; keeps the cube at 89.6 mm)
+SKIN = 0.8  # diffuser skin thickness (PCBWay SLA minimum wall)
 WALL = 1.6  # grid wall thickness (measured along the face)
 # Funnel cells: each LED's cell starts at the LED grid on the PCB and widens
 # towards the skin, so the 8 x 8 pixels spread over LIT_SPAN of the outer face.
