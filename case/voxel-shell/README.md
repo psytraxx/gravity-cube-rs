@@ -5,7 +5,7 @@
 An 89.6 mm cube built from six identical face shells with 45° mitred edges.
 Each shell holds one 65 × 66 mm WS2812 8×8 panel (`../led_module.png`) in a
 pocket. In front of the panel sits an 8×8 grid of funnel-shaped light cells and
-a 0.8 mm diffuser skin, all printed as one translucent part. The cells start
+a 1.0 mm diffuser skin, all printed as one translucent part. The cells start
 at the LEDs (8.125 mm pitch) and fan out to a 10 mm pitch, so the pixels fill
 80 mm of each 89.6 mm face with only a 4.8 mm rim at the edges.
 
@@ -13,10 +13,10 @@ All twelve edges carry a 45° bevel, 2.5 mm deep (a 5 mm facet) that stays
 inside the unlit rim. The USB-C socket and the switch sit on the bevel of the
 bottom front edge and point diagonally into the wedge between the front and
 bottom panels. The four cells above them (columns 2–5, outer row on the front
-and bottom faces) stop 4 mm short of the rim. Every other cell runs out to it.
+and bottom faces) stop 5 mm short of the rim. Every other cell runs out to it.
 
-The shells meet PCBWay's SLA rule of walls at least 0.8 mm; the thinnest wall is
-the 0.8 mm diffuser skin. `check_fit.py` measures this.
+Every wall is at least 1.0 mm, as PCBWay's review asked; the thinnest is the
+1.0 mm diffuser skin. `check_fit.py` measures this, counting tapering wedges too.
 
 ## Files
 
@@ -52,12 +52,12 @@ bead-blast the outside for an even frosted diffusion.
 | Gap from panel back to the neighbour's edge | 1.5 (leaves a wire channel along every edge) |
 | Lit area | 80 × 80 per face, 10 mm pixel pitch, 4.8 mm rim |
 | Grid walls | 1.6 thick; vertical beside the LEDs (0.76 clear, 0.26 if the grid is 0.5 off-centre on the 66 side), then fanning out; stop 1.3 above the PCB (clears capacitors) |
-| PCB front to diffuser skin | 7.9 |
-| Diffuser skin | 0.8 |
+| PCB front to diffuser skin | 7.7 |
+| Diffuser skin | 1.0 |
 | Clamp ring on the PCB margin | 0.6 (outer LEDs start 1.56 from the 65 mm edges) |
 | Edge bevel | 45°, 2.5 deep (5 mm facet), on all twelve edges |
 | USB-C cut-out | 14.6 × 8.6 in a 1.6 wall; the flange (15.8 × 9.3) stays on the outside and covers it |
-| Switch lever slot | 6.6 × 3.4 in a 1.6 wall; the switch is glued in |
+| Switch lever slot | 6.6 × 2.6 in a 2.1 wall; the switch is glued in |
 
 `USB_CUTOUT` is an estimate: the drawing only gives the flange size. Measure
 the body of your socket behind the flange and change it in `generate.py`

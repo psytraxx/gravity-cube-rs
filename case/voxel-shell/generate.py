@@ -36,8 +36,8 @@ EDGE_MARGIN = 1.56  # 65 mm edge to the outer LED rows
 FIT = 0.25  # clearance around the PCB in its pocket (resin prints vary by ~0.1-0.2)
 PANEL_GAP = 1.5  # gap between the back of a panel and its neighbour's edge
 RELIEF = 1.3  # grid walls stop this far above the PCB (clears the capacitors)
-GRID_DEPTH = 7.9  # PCB front to diffuser skin (deep enough for the USB-C socket; keeps the cube at 89.6 mm)
-SKIN = 0.8  # diffuser skin thickness (PCBWay SLA minimum wall)
+GRID_DEPTH = 7.7  # PCB front to diffuser skin (deep enough for the USB-C socket; with SKIN keeps the cube at 89.6 mm)
+SKIN = 1.0  # diffuser skin thickness (print-service minimum wall)
 WALL = 1.6  # grid wall thickness (measured along the face)
 # Funnel cells: each LED's cell starts at the LED grid on the PCB and widens
 # towards the skin, so the 8 x 8 pixels spread over LIT_SPAN of the outer face.
@@ -46,7 +46,7 @@ LIT_SPAN = 80.0  # lit width on the outside of each face (89.6 mm face -> 4.8 mm
 # way: in PORT_COLS the first PORT_ROWS rows share the space between
 # PORT_EDGE and the normal funnel row line instead.
 PORT_COLS = (2, 3, 4, 5)  # above the USB-C socket and the switch
-PORT_EDGE = 36.0  # how far (from the face centre) those cells may reach at the skin
+PORT_EDGE = 35.0  # how far (from the face centre) those cells may reach at the skin
 PORT_ROWS = 1  # only the outermost row is shortened
 CLAMP_RING = 0.6  # width of the ring that presses on the PCB margin
 
@@ -58,9 +58,9 @@ Z_PCB = Z_BACK + PCB_T  # front of the PCB (36.1)
 Z_GRID = Z_PCB + RELIEF  # bottom of the grid walls
 Z_SKIN = Z_PCB + GRID_DEPTH  # back of the diffuser skin
 LED_H = 1.6  # WS2812 5050 package height
-# cell walls stay vertical up to here, clear of the LEDs; at least 0.9 mm above the
-# bottom of the grid so the ledge where the outer wall turns outward is printable
-Z_KINK = max(Z_PCB + LED_H + 0.2, Z_GRID + 0.9)
+# cell walls stay vertical up to here, clear of the LEDs; at least 1.1 mm above the
+# bottom of the grid so the ledge where the outer wall turns outward is >= 1 mm
+Z_KINK = max(Z_PCB + LED_H + 0.2, Z_GRID + 1.1)
 OUTER = Z_SKIN + SKIN  # front face (44.8 -> 89.6 mm cube)
 
 # ---------------------------------------------------------------- pins
@@ -96,13 +96,13 @@ SW_PLATE_T = 0.6  # metal mounting plate thickness
 SW_BODY_W = 8.6  # switch body length behind the plate
 SW_HOLE_PITCH = 11.5
 SW_SCREW_D = 0  # M2 screw holes through the wall (0 = glue; no room for nuts behind the plate)
-SW_SLOT = (6.6, 3.4)  # lever opening: 3 mm travel + lever + clearance
-SW_WALL = 1.6  # the plate pocket runs past the facet; 1.6 keeps 0.8 mm under the faces
+SW_SLOT = (6.6, 2.6)  # lever opening: 3 mm travel + lever + clearance; 2.6 tall (2.0 lever) keeps 1 mm to the faces
+SW_WALL = 2.1  # the plate pocket runs past the facet; 2.1 keeps its corner >= 1 mm under the faces
 SW_X = 10.0
 PART_FIT = 0.2  # clearance per side
-MIN_WALL = 0.8  # PCBWay SLA minimum wall
+MIN_WALL = 1.0  # print-service minimum wall (PCBWay review asked for 1.0 mm)
 SW_BODY_H = 3.6  # switch body height across the facet
-WIRE_SLOT = (8.0, 4.4)  # wire channel from each pocket into the cube, along the diagonal;
+WIRE_SLOT = (8.0, 6.0)  # wire channel from each pocket into the cube, along the diagonal;
 # 4.4 tall so it takes out the board-pocket lips where it passes instead of leaving slivers
 WIRE_LEN = 6.0  # how far the wire channel runs past the back of each pocket
 
@@ -193,7 +193,7 @@ def _cell(xb, yb, xt, yt):
     return straight + funnel
 
 
-def face_shell(port_side=0):
+def face_shell(port_side=0, pins=True):
     """One mitred face shell. port_side = -1 / +1 shortens the outer cells along the
     -Y / +Y edge in PORT_COLS, leaving room for the USB-C socket."""
     s = frustum() ^ chamfered_cube()
@@ -204,7 +204,8 @@ def face_shell(port_side=0):
     rx, ry = HX - CLAMP_RING, HY - CLAMP_RING
     s = s - box(-rx, rx, -ry, ry, Z_PCB - 0.01, Z_GRID)
     s = s - sum_all(light_cells(port_side))
-    s = s - pin_holes()
+    if pins:
+        s = s - pin_holes()
     return s
 
 
@@ -284,6 +285,12 @@ def port_cut():
         cut = cut + box(USB_X - pw / 2, USB_X + pw / 2, lo, hi, OUTER - USB_WALL - 0.01, OUTER + 1)
     cut = bevel_place(cut)
     cut = cut + _blunt(USB_X - pw / 2, USB_X + pw / 2, ch / 2)
+    # where a wire channel crosses the rim that rests on the board edge, clear that rim
+    # strip too: otherwise the channel leaves a thin fin of it standing
+    r0, r1 = HMAX - CLAMP_RING - 0.01, HMAX + FIT + 0.01
+    for x in (USB_X, SW_X):
+        cut = cut + box(x - ww / 2, x + ww / 2, -r1, -r0, Z_PCB - 0.01, Z_GRID)   # front shell
+        cut = cut + box(x - ww / 2, x + ww / 2, -Z_GRID, -Z_PCB + 0.01, r0, r1)   # bottom shell
     return cut
 
 
@@ -356,7 +363,7 @@ def switch_model():
     return bevel_place(plate + body + pins + lever)
 
 
-FIT_TEST_HEIGHT = 2.0  # grid wall height kept in the fit-test piece
+# the fit-test piece keeps the grid walls up to Z_KINK, where they are still vertical
 
 
 def fit_test():
@@ -365,7 +372,9 @@ def fit_test():
     Cheap to print. Press a real panel in: if it seats flat and no LED touches
     a wall, the full shells fit.
     """
-    return face_shell() ^ box(-OUTER, OUTER, -OUTER, OUTER, Z_BACK - 1, Z_GRID + FIT_TEST_HEIGHT)
+    # straight outer sides (no mitre), so the flat top meets them at 90 degrees, not a sharp 45
+    # (no dowel holes: the test piece does not need them, and they would break out of its sides)
+    return face_shell(pins=False) ^ box(-Z_BACK, Z_BACK, -Z_BACK, Z_BACK, Z_BACK - 1, Z_KINK)
 
 
 # face placements: rotation (degrees, applied to a +Z shell) for each cube face
