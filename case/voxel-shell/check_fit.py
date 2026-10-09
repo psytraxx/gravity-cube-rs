@@ -93,9 +93,9 @@ check("alignment pin holes vs light cells, 0.4 mm margin", (grown(g.pin_holes())
 check("alignment pin holes vs port pockets", (g.pin_holes().rotate(g.FACES["front"]) ^ cut).volume()
       + (g.pin_holes().rotate(g.FACES["bottom"]) ^ cut).volume())
 
-print("== printability (PCBWay SLA: walls >= 0.8 mm)")
+print(f"== printability (walls >= {g.MIN_WALL} mm)")
 import numpy as np, trimesh
-for fname in ("shell.stl", "shell_port_front.stl", "shell_port_bottom.stl"):
+for fname in ("shell.stl", "shell_port_front.stl", "shell_port_bottom.stl", "fit_test.stl"):
     tm = trimesh.load(fname)
     np.random.seed(0)
     pts, fi = trimesh.sample.sample_surface_even(tm, 60000)
@@ -103,8 +103,9 @@ for fname in ("shell.stl", "shell_port_front.stl", "shell_port_bottom.stl"):
     o = pts - nn * 1e-3
     loc, ri, ti = tm.ray.intersects_location(o, -nn, multiple_hits=False)
     d = np.linalg.norm(loc - o[ri], axis=1)
-    # wall thickness = distance to an opposite, near-parallel surface (45 degree edges are not walls)
-    opp = (tm.face_normals[ti] * nn[ri]).sum(1) < -0.9
+    # wall thickness = distance to an opposite surface, including ones up to 45 degrees off
+    # (print-service checkers flag thin wedges too)
+    opp = (tm.face_normals[ti] * nn[ri]).sum(1) < -0.7
     thinnest = float(d[opp].min())
     check(f"{fname} thinnest wall {thinnest:.2f} mm (must be >= {g.MIN_WALL})", g.MIN_WALL - thinnest if thinnest < g.MIN_WALL - 0.005 else 0.0)  # 0.005 mm for float rounding
 
