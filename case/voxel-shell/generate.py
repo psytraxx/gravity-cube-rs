@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
-"""Voxel Shell enclosure for the 8x8x8 Gravity Cube.
+"""Voxel Shell enclosure for the Gravity Cube.
 
-Six identical face shells with 45 degree mitred edges hold six 65 x 66 mm
-WS2812 8x8 panels. Each shell is one translucent part: a pocket for the PCB,
-an 8x8 light grid and a closed diffuser skin on the front. Two variants carry
-a USB-C socket and a slide switch on the bottom front edge.
+Six identical face shells with 45 degree mitred edges hold six WS2812 LED
+panels. Each shell is one translucent part: a pocket for the panel, a light
+grid and a closed diffuser skin on the front. Two variants carry a USB-C
+socket and a slide switch on the bottom front edge.
+
+Two panel profiles (VOXEL_PROFILE environment variable):
+  8x8    65 x 66 mm rigid 8x8 panels   -> case/voxel-shell/        (default)
+  16x16  160 x 160 mm flexible 16x16   -> case/voxel-shell-16x16/
 
 Coordinates: mm, cube centred on the origin. A shell is modelled with its
 face normal along +Z; the front (diffuser) face is at z = OUTER.
 
-    pip install manifold3d trimesh numpy
-    python3 generate.py            # writes the STL files next to this script
+    pip install manifold3d trimesh numpy rtree
+    python3 generate.py                        # 8x8
+    VOXEL_PROFILE=16x16 python3 generate.py    # 16x16
 """
 
 import math
@@ -20,39 +25,63 @@ import numpy as np
 import trimesh
 from manifold3d import Manifold
 
+PROFILE = os.environ.get("VOXEL_PROFILE", "8x8")
+if PROFILE not in ("8x8", "16x16"):
+    raise SystemExit(f"unknown VOXEL_PROFILE {PROFILE!r}; use 8x8 or 16x16")
+HERE = os.path.dirname(os.path.abspath(__file__))
+OUT_DIR = HERE if PROFILE == "8x8" else os.path.join(os.path.dirname(HERE), "voxel-shell-16x16")
+
 # ---------------------------------------------------------------- panel
-# The boards are 65 x 66 mm. In shell coordinates the 65 mm side runs along X
-# and the 66 mm side along Y. The 8x8 LED grid (8.125 mm pitch, outer LEDs
-# 1.56 mm from the 65 mm edges) is assumed centred, so the 66 mm direction
-# has 0.5 mm extra margin on each side.
-PANEL_X = 65.0  # PCB width
-PANEL_Y = 66.0  # PCB length
-PCB_T = 1.6  # PCB thickness
-GRID_SPAN = 65.0  # LED grid span: 8 x pitch
-PITCH = GRID_SPAN / 8  # LED pitch, 8.125
-EDGE_MARGIN = 1.56  # 65 mm edge to the outer LED rows
+if PROFILE == "8x8":
+    # Rigid boards, 65 x 66 mm. In shell coordinates the 65 mm side runs along X
+    # and the 66 mm side along Y. The 8x8 LED grid (8.125 mm pitch, outer LEDs
+    # 1.56 mm from the 65 mm edges) is assumed centred, so the 66 mm direction
+    # has 0.5 mm extra margin on each side.
+    GRID_N = 8  # LEDs per row
+    PANEL_X = 65.0  # PCB width
+    PANEL_Y = 66.0  # PCB length
+    PCB_T = 1.6  # PCB thickness
+    GRID_SPAN = 65.0  # LED grid span: GRID_N x pitch
+else:
+    # Flexible 16x16 panels, 160 x 160 mm, 10 mm pitch (outer LEDs 2.5 mm from
+    # the edge). A flexible panel will not stay flat on its own, so it is glued
+    # to a 160 x 160 x 1 mm backing sheet (aluminium or FR4). Panel + glue +
+    # sheet make a 1.6 mm stack, the same as the rigid boards; the port and pin
+    # geometry along the edges is then identical to the 8x8 shell.
+    GRID_N = 16
+    PANEL_X = 160.0
+    PANEL_Y = 160.0
+    PCB_T = 1.6  # flexible PCB (~0.3-0.5 mm) + adhesive + 1 mm backing sheet
+    GRID_SPAN = 160.0
+PITCH = GRID_SPAN / GRID_N  # LED pitch (8.125 / 10)
+EDGE_MARGIN = (PANEL_X - GRID_SPAN) / 2 + (PITCH - 5.0) / 2  # panel edge to the outer LED bodies
 
 # ---------------------------------------------------------------- shell
-FIT = 0.25  # clearance around the PCB in its pocket (resin prints vary by ~0.1-0.2)
+FIT = 0.25 if PROFILE == "8x8" else 0.4  # clearance around the panel in its pocket (resin prints vary by ~0.1-0.2)
 PANEL_GAP = 1.5  # gap between the back of a panel and its neighbour's edge
 RELIEF = 1.3  # grid walls stop this far above the PCB (clears the capacitors)
-GRID_DEPTH = 7.7  # PCB front to diffuser skin (deep enough for the USB-C socket; with SKIN keeps the cube at 89.6 mm)
 SKIN = 1.0  # diffuser skin thickness (print-service minimum wall)
+# PCB front to diffuser skin; with the 1.5 mm panel gap, the 1.6 mm panel stack
+# and the skin, the outer face sits EDGE_DEPTH beyond the panel edge.
+EDGE_DEPTH = 11.8
+GRID_DEPTH = EDGE_DEPTH - PANEL_GAP - PCB_T - SKIN  # 7.7
 WALL = 1.6  # grid wall thickness (measured along the face)
+RIM = 4.8  # unlit rim at each edge of the outer face
 # Funnel cells: each LED's cell starts at the LED grid on the PCB and widens
-# towards the skin, so the 8 x 8 pixels spread over LIT_SPAN of the outer face.
-LIT_SPAN = 80.0  # lit width on the outside of each face (89.6 mm face -> 4.8 mm rim)
+# towards the skin, so the pixels spread over LIT_SPAN of the outer face.
 # Along the port edge the cells above the USB-C socket cannot spread all the
 # way: in PORT_COLS the first PORT_ROWS rows share the space between
 # PORT_EDGE and the normal funnel row line instead.
-PORT_COLS = (2, 3, 4, 5)  # above the USB-C socket and the switch
-PORT_EDGE = 35.0  # how far (from the face centre) those cells may reach at the skin
 PORT_ROWS = 1  # only the outermost row is shortened
+PORT_COLS = (2, 3, 4, 5) if PROFILE == "8x8" else (6, 7, 8, 9)  # above the USB-C socket and the switch
 CLAMP_RING = 0.6  # width of the ring that presses on the PCB margin
 
 H = GRID_SPAN / 2  # half of the LED grid (32.5)
 HX, HY = PANEL_X / 2, PANEL_Y / 2  # PCB half sizes (32.5, 33.0)
 HMAX = max(HX, HY)  # clearances use the long side, so a panel can face either way
+# outer walls of the edge cells: at least 0.5 mm in from the panel edge (on the
+# 8x8 the 66 mm side gives that; the square 16x16 panel needs the cells pulled in)
+GRID_EDGE = min(H, HMAX - 0.5)
 Z_BACK = HMAX + PANEL_GAP  # back of the PCB / back of the shell (34.5)
 Z_PCB = Z_BACK + PCB_T  # front of the PCB (36.1)
 Z_GRID = Z_PCB + RELIEF  # bottom of the grid walls
@@ -61,13 +90,16 @@ LED_H = 1.6  # WS2812 5050 package height
 # cell walls stay vertical up to here, clear of the LEDs; at least 1.1 mm above the
 # bottom of the grid so the ledge where the outer wall turns outward is >= 1 mm
 Z_KINK = max(Z_PCB + LED_H + 0.2, Z_GRID + 1.1)
-OUTER = Z_SKIN + SKIN  # front face (44.8 -> 89.6 mm cube)
+OUTER = Z_SKIN + SKIN  # front face (44.8 -> 89.6 mm cube / 91.8 -> 183.6 mm cube)
+BIG = max(60.0, OUTER + 20)  # "far enough" for helper cutting boxes
+LIT_SPAN = 2 * (OUTER - RIM)  # lit width on the outside of each face (80 / 174 mm)
+PORT_EDGE = OUTER - 9.8  # how far (from the face centre) the cells above the ports reach (35 / 82)
 
 # ---------------------------------------------------------------- pins
 PIN_D = 2.1  # for 2 mm dowels or 1.75 mm filament
 PIN_DEPTH = 3.0  # per side; must stay clear of the funnel cells
-PIN_ALONG = 25.0  # pin positions along each edge: +-PIN_ALONG
-PIN_AT = 37.0  # where the pin axis meets the mitre (x = z = PIN_AT)
+PIN_ALONG = (25.0,) if PROFILE == "8x8" else (25.0, 60.0)  # pin positions along each edge: +-each
+PIN_AT = OUTER - 7.8  # where the pin axis meets the mitre (x = z = PIN_AT): 37 / 84
 
 # ---------------------------------------------------------------- USB-C + switch (cube coordinates; front = +Z, bottom = -Y)
 # All twelve cube edges carry a 45 degree bevel BEVEL_S deep (measured square
@@ -159,7 +191,7 @@ def chamfered_cube():
 
 def pin_holes():
     holes = []
-    for along in (-PIN_ALONG, PIN_ALONG):
+    for along in [s * a for a in PIN_ALONG for s in (-1, 1)]:
         # hole along +Z, then tilt 45 deg so it is normal to the x = z mitre
         h = Manifold.cylinder(PIN_DEPTH * 2, PIN_D / 2, PIN_D / 2, SEG, True)
         h = h.rotate([0, -45, 0]).translate([PIN_AT, along, PIN_AT])
@@ -176,9 +208,9 @@ def sum_all(parts):
 
 
 def _funnel(n_edge_lo, n_edge_hi):
-    """Skin-side boundaries for 8 cells between the two given half-widths."""
+    """Skin-side boundaries for GRID_N cells between the two given half-widths."""
     lo, hi = -n_edge_lo, n_edge_hi
-    return [lo + k * (hi - lo) / 8 for k in range(9)]
+    return [lo + k * (hi - lo) / GRID_N for k in range(GRID_N + 1)]
 
 
 def _rect(x, y, z):
@@ -210,13 +242,14 @@ def face_shell(port_side=0, pins=True):
 
 
 def light_cells(port_side=0):
-    """The 64 funnel cells of one face (as solids to subtract)."""
-    led = [-H + k * PITCH for k in range(9)]
+    """The GRID_N x GRID_N funnel cells of one face (as solids to subtract)."""
+    led = [-H + k * PITCH for k in range(GRID_N + 1)]
+    led[0], led[-1] = -GRID_EDGE, GRID_EDGE
     wl = LIT_SPAN / 2
     xt = _funnel(wl, wl)
     yt_all = _funnel(wl, wl)
     cells = []
-    for i in range(8):
+    for i in range(GRID_N):
         yt = list(yt_all)
         if port_side and i in PORT_COLS:
             n = PORT_ROWS
@@ -225,10 +258,10 @@ def light_cells(port_side=0):
                 for k in range(n + 1):
                     yt[k] = lo + k * (hi - lo) / n
             else:
-                lo, hi = yt_all[8 - n], PORT_EDGE
+                lo, hi = yt_all[GRID_N - n], PORT_EDGE
                 for k in range(n + 1):
-                    yt[8 - n + k] = lo + k * (hi - lo) / n
-        for j in range(8):
+                    yt[GRID_N - n + k] = lo + k * (hi - lo) / n
+        for j in range(GRID_N):
             cells.append(_cell((led[i], led[i + 1]), (led[j], led[j + 1]), (xt[i], xt[i + 1]), (yt[j], yt[j + 1])))
     return cells
 
@@ -245,8 +278,9 @@ def _blunt(x0, x1, v_edge, min_t=MIN_WALL):
     min_t thick there. Returns the material to remove, in cube coordinates."""
     c = math.sqrt(2) * v_edge
     y_c = (c - OUTER) + min_t * math.sqrt(2)  # front face: cut back to here
-    front = bevel_place(box(x0, x1, v_edge, 40, OUTER - 50, OUTER + 10)) ^ box(x0, x1, -60, y_c, -60, 60)
-    bottom = bevel_place(box(x0, x1, -40, -v_edge, OUTER - 50, OUTER + 10)) ^ box(x0, x1, -60, 60, -y_c, 60)
+    v, d = BIG - 20, BIG - 10
+    front = bevel_place(box(x0, x1, v_edge, v, OUTER - d, OUTER + 10)) ^ box(x0, x1, -BIG, y_c, -BIG, BIG)
+    bottom = bevel_place(box(x0, x1, -v, -v_edge, OUTER - d, OUTER + 10)) ^ box(x0, x1, -BIG, BIG, -y_c, BIG)
     return front + bottom
 
 
@@ -281,7 +315,7 @@ def port_cut():
     # wall would taper to nothing under the faces, so open it (the flange covers it)
     band = BEVEL_S + USB_WALL - MIN_WALL * math.sqrt(2)  # faces run along v + w = BEVEL_S in the facet frame
     for sv in (1, -1):
-        lo, hi = sorted((sv * band, sv * 40))
+        lo, hi = sorted((sv * band, sv * (BIG - 20)))
         cut = cut + box(USB_X - pw / 2, USB_X + pw / 2, lo, hi, OUTER - USB_WALL - 0.01, OUTER + 1)
     cut = bevel_place(cut)
     cut = cut + _blunt(USB_X - pw / 2, USB_X + pw / 2, ch / 2)
@@ -405,7 +439,8 @@ def to_trimesh(m):
 
 
 def main():
-    out = os.path.dirname(os.path.abspath(__file__))
+    out = OUT_DIR
+    os.makedirs(out, exist_ok=True)
     shell = face_shell()
     cut = port_cut()
 

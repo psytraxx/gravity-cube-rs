@@ -34,7 +34,8 @@ gravity-cube-rs/
 │   └── Cargo.toml
 ├── case/                   # 3D-printable enclosure (published to GitHub Pages)
 │   ├── concepts.html       # Comparison of five frame concepts
-│   └── voxel-shell/        # STLs, generator, fit checks, 3D viewer
+│   ├── voxel-shell/        # STLs, generator, fit checks, 3D viewer
+│   └── voxel-shell-16x16/  # same enclosure for 16x16 flexible panels
 └── desktop/                # Desktop simulator
     ├── shaders/            # WGSL shaders (vertex, fragment, wireframe)
     ├── src/
@@ -249,6 +250,7 @@ The **Voxel Shell** is an 89.6 mm cube made of six mitred face shells, printed i
 - [Interactive 3D viewer and STL downloads](https://psytraxx.github.io/gravity-cube-rs/voxel-shell/viewer.html)
 - [Frame concepts that were compared](https://psytraxx.github.io/gravity-cube-rs/concepts.html)
 - Source, parts list and assembly steps: [`case/voxel-shell/README.md`](case/voxel-shell/README.md)
+- 16×16 version (183.6 mm cube, flexible 160 × 160 mm panels): [3D viewer](https://psytraxx.github.io/gravity-cube-rs/voxel-shell-16x16/viewer.html), [`case/voxel-shell-16x16/README.md`](case/voxel-shell-16x16/README.md)
 
 The site is published from `case/` by `.github/workflows/pages.yml` on every push to `main` that changes it.
 
