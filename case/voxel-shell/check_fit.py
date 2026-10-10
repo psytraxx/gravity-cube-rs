@@ -3,10 +3,14 @@
 
 Every check builds solids with manifold3d and measures overlap volume; any
 overlap above 0.001 mm3 fails. The four plain shells can be fitted with the
-66 mm side of their panel either way round, so all 16 combinations are tested.
+long side of their panel either way round, so all 16 combinations are tested.
+
+    python3 check_fit.py                        # 8x8
+    VOXEL_PROFILE=16x16 python3 check_fit.py    # 16x16
 """
 
 import itertools
+import os
 import sys
 
 import generate as g
@@ -23,12 +27,12 @@ def check(name, vol, want_zero=True):
 
 
 def panel(dx=0.0, dy=0.0, oversize=0.0):
-    """PCB + 64 LEDs + 64 capacitors in shell coordinates; LED grid shifted by dx, dy."""
+    """PCB + GRID_N^2 LEDs + capacitors in shell coordinates; LED grid shifted by dx, dy."""
     hx, hy = g.HX + oversize / 2, g.HY + oversize / 2
     pcb = g.box(-hx, hx, -hy, hy, g.Z_BACK, g.Z_PCB)
     leds, caps = [], []
-    for i in range(8):
-        for j in range(8):
+    for i in range(g.GRID_N):
+        for j in range(g.GRID_N):
             cx = (i + 0.5) * g.PITCH - g.H + dx
             cy = (j + 0.5) * g.PITCH - g.H + dy
             leds.append(g.box(cx - 2.5, cx + 2.5, cy - 2.5, cy + 2.5, g.Z_PCB, g.Z_PCB + 1.6))
@@ -49,7 +53,11 @@ def grown(m, d=0.4):
     return out
 
 print("== one shell and its own panel")
-for label, dx, dy in (("LED grid centred", 0, 0), ("LED grid 0.5 mm off-centre on the 66 mm side", 0, 0.5)):
+offsets = [("LED grid centred", 0, 0)]
+off = (g.PANEL_Y - g.GRID_SPAN) / 2  # 8x8: the grid may sit at either end of the 66 mm side
+if off:
+    offsets.append((f"LED grid {off} mm off-centre on the {g.PANEL_Y:g} mm side", 0, off))
+for label, dx, dy in offsets:
     pcb, leds, caps = panel(dx, dy)
     check(f"PCB vs shell ({label})", (shell ^ pcb).volume())
     check(f"LEDs vs shell ({label})", (shell ^ leds).volume())
@@ -96,7 +104,7 @@ check("alignment pin holes vs port pockets", (g.pin_holes().rotate(g.FACES["fron
 print(f"== printability (walls >= {g.MIN_WALL} mm)")
 import numpy as np, trimesh
 for fname in ("shell.stl", "shell_port_front.stl", "shell_port_bottom.stl", "fit_test.stl"):
-    tm = trimesh.load(fname)
+    tm = trimesh.load(os.path.join(g.OUT_DIR, fname))
     np.random.seed(0)
     pts, fi = trimesh.sample.sample_surface_even(tm, 60000)
     nn = tm.face_normals[fi]
@@ -114,8 +122,10 @@ edge_channel = g.box(-20, 20, -g.Z_BACK, -g.HMAX, g.HMAX, g.Z_BACK)
 check("port pockets open into the edge channel (must be > 0)", (cut ^ edge_channel).volume(), want_zero=False)
 
 print()
-print(f"LED to grid wall: {(g.PITCH - g.WALL - 5.0) / 2:.2f} mm per side (centred), "
-      f"{(g.PITCH - g.WALL - 5.0) / 2 - 0.5:.2f} mm if 0.5 mm off-centre")
+inner = (g.PITCH - g.WALL - 5.0) / 2
+outer = g.GRID_EDGE - g.WALL / 2 - (g.H - g.PITCH / 2 + 2.5)
+print(f"LED to grid wall: {inner:.2f} mm per side (centred), {min(inner, outer) - off:.2f} mm worst case "
+      f"(edge cells{f', LED grid {off} mm off-centre' if off else ''})")
 print(f"PCB to pocket wall: {g.FIT:.2f} mm per side; panel edge to neighbouring panel back: "
       f"{g.Z_BACK - g.HMAX:.2f} mm")
 print(f"Outer cube: {2 * g.OUTER:.1f} mm")
