@@ -7,15 +7,15 @@ grid and a closed diffuser skin on the front. Two variants carry a USB-C
 socket and a slide switch on the bottom front edge.
 
 Two 8x8 panel profiles (VOXEL_PROFILE environment variable), same firmware:
-  65mm  65 x 66 mm rigid panels, 8.125 mm pitch -> case/voxel-shell/       (default)
-  80mm  80 x 80 mm flexible panels, 10 mm pitch -> case/voxel-shell-80mm/
+  65x65  65 x 66 mm rigid panels, 8.125 mm pitch -> case/voxel-shell-65x65/  (default)
+  80x80  80 x 80 mm flexible panels, 10 mm pitch -> case/voxel-shell-80x80/
 
 Coordinates: mm, cube centred on the origin. A shell is modelled with its
 face normal along +Z; the front (diffuser) face is at z = OUTER.
 
     pip install manifold3d trimesh numpy rtree
-    python3 generate.py                       # 65 mm panels
-    VOXEL_PROFILE=80mm python3 generate.py    # 80 mm panels
+    python3 generate.py                        # 65 mm panels
+    VOXEL_PROFILE=80x80 python3 generate.py    # 80 mm panels
 """
 
 import math
@@ -25,15 +25,15 @@ import numpy as np
 import trimesh
 from manifold3d import Manifold
 
-PROFILE = os.environ.get("VOXEL_PROFILE", "65mm")
-if PROFILE not in ("65mm", "80mm"):
-    raise SystemExit(f"unknown VOXEL_PROFILE {PROFILE!r}; use 65mm or 80mm")
+PROFILE = os.environ.get("VOXEL_PROFILE", "65x65")
+if PROFILE not in ("65x65", "80x80"):
+    raise SystemExit(f"unknown VOXEL_PROFILE {PROFILE!r}; use 65x65 or 80x80")
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT_DIR = HERE if PROFILE == "65mm" else os.path.join(os.path.dirname(HERE), "voxel-shell-80mm")
+OUT_DIR = HERE if PROFILE == "65x65" else os.path.join(os.path.dirname(HERE), "voxel-shell-80x80")
 
 # ---------------------------------------------------------------- panel
 GRID_N = 8  # LEDs per row
-if PROFILE == "65mm":
+if PROFILE == "65x65":
     # Rigid boards, 65 x 66 mm. In shell coordinates the 65 mm side runs along X
     # and the 66 mm side along Y. The 8x8 LED grid (8.125 mm pitch, outer LEDs
     # 1.56 mm from the 65 mm edges) is assumed centred, so the 66 mm direction
@@ -56,7 +56,7 @@ PITCH = GRID_SPAN / GRID_N  # LED pitch (8.125 / 10)
 EDGE_MARGIN = (PANEL_X - GRID_SPAN) / 2 + (PITCH - 5.0) / 2  # panel edge to the outer LED bodies
 
 # ---------------------------------------------------------------- shell
-FIT = 0.25 if PROFILE == "65mm" else 0.4  # clearance around the panel in its pocket (resin prints vary by ~0.1-0.2)
+FIT = 0.25 if PROFILE == "65x65" else 0.4  # clearance around the panel in its pocket (resin prints vary by ~0.1-0.2)
 PANEL_GAP = 1.5  # gap between the back of a panel and its neighbour's edge
 RELIEF = 1.3  # grid walls stop this far above the PCB (clears the capacitors)
 SKIN = 1.0  # diffuser skin thickness (print-service minimum wall)
@@ -97,7 +97,7 @@ PORT_EDGE = OUTER - 9.8  # how far (from the face centre) the cells above the po
 # ---------------------------------------------------------------- pins
 PIN_D = 2.1  # for 2 mm dowels or 1.75 mm filament
 PIN_DEPTH = 3.0  # per side; must stay clear of the funnel cells
-PIN_ALONG = (25.0,) if PROFILE == "65mm" else (30.0,)  # pin positions along each edge: +-each
+PIN_ALONG = (25.0,) if PROFILE == "65x65" else (30.0,)  # pin positions along each edge: +-each
 PIN_AT = OUTER - 7.8  # where the pin axis meets the mitre (x = z = PIN_AT): 37 / 44
 
 # ---------------------------------------------------------------- USB-C + switch (cube coordinates; front = +Z, bottom = -Y)

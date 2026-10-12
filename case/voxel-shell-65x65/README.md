@@ -1,4 +1,4 @@
-# Voxel Shell enclosure
+# Voxel Shell 65×65 enclosure
 
 ![Voxel Shell renders](preview.png)
 
@@ -80,13 +80,13 @@ before ordering.
 
 ## Viewing
 
-Online: <https://psytraxx.github.io/gravity-cube-rs/voxel-shell/viewer.html>
+Online: <https://psytraxx.github.io/gravity-cube-rs/voxel-shell-65x65/viewer.html>
 (published from `case/` by `.github/workflows/pages.yml`).
 
 Locally, browsers won't load STL files from `file://`, so serve the folder:
 
 ```bash
-cd case/voxel-shell && python3 -m http.server 8000
+cd case/voxel-shell-65x65 && python3 -m http.server 8000
 # open http://localhost:8000/viewer.html
 ```
 
@@ -104,6 +104,6 @@ python3 generate.py
 python3 check_fit.py   # must end with "All checks passed."
 ```
 
-All dimensions are constants at the top of `generate.py`. `VOXEL_PROFILE=80mm`
+All dimensions are constants at the top of `generate.py`. `VOXEL_PROFILE=80x80`
 builds the 103.6 mm version for flexible 80 × 80 mm 8×8 panels into
-[`../voxel-shell-80mm/`](../voxel-shell-80mm/README.md).
+[`../voxel-shell-80x80/`](../voxel-shell-80x80/README.md).

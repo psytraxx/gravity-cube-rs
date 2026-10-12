@@ -5,8 +5,8 @@ Every check builds solids with manifold3d and measures overlap volume; any
 overlap above 0.001 mm3 fails. The four plain shells can be fitted with the
 long side of their panel either way round, so all 16 combinations are tested.
 
-    python3 check_fit.py                       # 65 mm panels
-    VOXEL_PROFILE=80mm python3 check_fit.py    # 80 mm panels
+    python3 check_fit.py                        # 65 mm panels
+    VOXEL_PROFILE=80x80 python3 check_fit.py    # 80 mm panels
 """
 
 import itertools
