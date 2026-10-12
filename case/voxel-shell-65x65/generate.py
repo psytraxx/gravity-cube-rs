@@ -6,16 +6,16 @@ panels. Each shell is one translucent part: a pocket for the panel, a light
 grid and a closed diffuser skin on the front. Two variants carry a USB-C
 socket and a slide switch on the bottom front edge.
 
-Two panel profiles (VOXEL_PROFILE environment variable):
-  8x8    65 x 66 mm rigid 8x8 panels   -> case/voxel-shell/        (default)
-  16x16  160 x 160 mm flexible 16x16   -> case/voxel-shell-16x16/
+Two 8x8 panel profiles (VOXEL_PROFILE environment variable), same firmware:
+  65x65  65 x 66 mm rigid panels, 8.125 mm pitch -> case/voxel-shell-65x65/  (default)
+  80x80  80 x 80 mm flexible panels, 10 mm pitch -> case/voxel-shell-80x80/
 
 Coordinates: mm, cube centred on the origin. A shell is modelled with its
 face normal along +Z; the front (diffuser) face is at z = OUTER.
 
     pip install manifold3d trimesh numpy rtree
-    python3 generate.py                        # 8x8
-    VOXEL_PROFILE=16x16 python3 generate.py    # 16x16
+    python3 generate.py                        # 65 mm panels
+    VOXEL_PROFILE=80x80 python3 generate.py    # 80 mm panels
 """
 
 import math
@@ -25,39 +25,38 @@ import numpy as np
 import trimesh
 from manifold3d import Manifold
 
-PROFILE = os.environ.get("VOXEL_PROFILE", "8x8")
-if PROFILE not in ("8x8", "16x16"):
-    raise SystemExit(f"unknown VOXEL_PROFILE {PROFILE!r}; use 8x8 or 16x16")
+PROFILE = os.environ.get("VOXEL_PROFILE", "65x65")
+if PROFILE not in ("65x65", "80x80"):
+    raise SystemExit(f"unknown VOXEL_PROFILE {PROFILE!r}; use 65x65 or 80x80")
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT_DIR = HERE if PROFILE == "8x8" else os.path.join(os.path.dirname(HERE), "voxel-shell-16x16")
+OUT_DIR = HERE if PROFILE == "65x65" else os.path.join(os.path.dirname(HERE), "voxel-shell-80x80")
 
 # ---------------------------------------------------------------- panel
-if PROFILE == "8x8":
+GRID_N = 8  # LEDs per row
+if PROFILE == "65x65":
     # Rigid boards, 65 x 66 mm. In shell coordinates the 65 mm side runs along X
     # and the 66 mm side along Y. The 8x8 LED grid (8.125 mm pitch, outer LEDs
     # 1.56 mm from the 65 mm edges) is assumed centred, so the 66 mm direction
     # has 0.5 mm extra margin on each side.
-    GRID_N = 8  # LEDs per row
     PANEL_X = 65.0  # PCB width
     PANEL_Y = 66.0  # PCB length
     PCB_T = 1.6  # PCB thickness
     GRID_SPAN = 65.0  # LED grid span: GRID_N x pitch
 else:
-    # Flexible 16x16 panels, 160 x 160 mm, 10 mm pitch (outer LEDs 2.5 mm from
-    # the edge). A flexible panel will not stay flat on its own, so it is glued
-    # to a 160 x 160 x 1 mm backing sheet (aluminium or FR4). Panel + glue +
-    # sheet make a 1.6 mm stack, the same as the rigid boards; the port and pin
-    # geometry along the edges is then identical to the 8x8 shell.
-    GRID_N = 16
-    PANEL_X = 160.0
-    PANEL_Y = 160.0
+    # Flexible boards, 80 x 80 mm, 10 mm pitch (outer LEDs 2.5 mm from the
+    # edge). A flexible panel will not stay flat on its own, so it is glued to
+    # an 80 x 80 x 1 mm backing sheet (aluminium or FR4). Panel + glue + sheet
+    # make a 1.6 mm stack, the same as the rigid boards; the port and pin
+    # geometry along the edges is then the same as on the 65 mm shell.
+    PANEL_X = 80.0
+    PANEL_Y = 80.0
     PCB_T = 1.6  # flexible PCB (~0.3-0.5 mm) + adhesive + 1 mm backing sheet
-    GRID_SPAN = 160.0
+    GRID_SPAN = 80.0
 PITCH = GRID_SPAN / GRID_N  # LED pitch (8.125 / 10)
 EDGE_MARGIN = (PANEL_X - GRID_SPAN) / 2 + (PITCH - 5.0) / 2  # panel edge to the outer LED bodies
 
 # ---------------------------------------------------------------- shell
-FIT = 0.25 if PROFILE == "8x8" else 0.4  # clearance around the panel in its pocket (resin prints vary by ~0.1-0.2)
+FIT = 0.25 if PROFILE == "65x65" else 0.4  # clearance around the panel in its pocket (resin prints vary by ~0.1-0.2)
 PANEL_GAP = 1.5  # gap between the back of a panel and its neighbour's edge
 RELIEF = 1.3  # grid walls stop this far above the PCB (clears the capacitors)
 SKIN = 1.0  # diffuser skin thickness (print-service minimum wall)
@@ -73,14 +72,14 @@ RIM = 4.8  # unlit rim at each edge of the outer face
 # way: in PORT_COLS the first PORT_ROWS rows share the space between
 # PORT_EDGE and the normal funnel row line instead.
 PORT_ROWS = 1  # only the outermost row is shortened
-PORT_COLS = (2, 3, 4, 5) if PROFILE == "8x8" else (6, 7, 8, 9)  # above the USB-C socket and the switch
+PORT_COLS = (2, 3, 4, 5)  # above the USB-C socket and the switch
 CLAMP_RING = 0.6  # width of the ring that presses on the PCB margin
 
 H = GRID_SPAN / 2  # half of the LED grid (32.5)
 HX, HY = PANEL_X / 2, PANEL_Y / 2  # PCB half sizes (32.5, 33.0)
 HMAX = max(HX, HY)  # clearances use the long side, so a panel can face either way
 # outer walls of the edge cells: at least 0.5 mm in from the panel edge (on the
-# 8x8 the 66 mm side gives that; the square 16x16 panel needs the cells pulled in)
+# 65 mm boards the 66 mm side gives that; the square 80 mm panel needs the cells pulled in)
 GRID_EDGE = min(H, HMAX - 0.5)
 Z_BACK = HMAX + PANEL_GAP  # back of the PCB / back of the shell (34.5)
 Z_PCB = Z_BACK + PCB_T  # front of the PCB (36.1)
@@ -90,16 +89,16 @@ LED_H = 1.6  # WS2812 5050 package height
 # cell walls stay vertical up to here, clear of the LEDs; at least 1.1 mm above the
 # bottom of the grid so the ledge where the outer wall turns outward is >= 1 mm
 Z_KINK = max(Z_PCB + LED_H + 0.2, Z_GRID + 1.1)
-OUTER = Z_SKIN + SKIN  # front face (44.8 -> 89.6 mm cube / 91.8 -> 183.6 mm cube)
+OUTER = Z_SKIN + SKIN  # front face (44.8 -> 89.6 mm cube / 51.8 -> 103.6 mm cube)
 BIG = max(60.0, OUTER + 20)  # "far enough" for helper cutting boxes
-LIT_SPAN = 2 * (OUTER - RIM)  # lit width on the outside of each face (80 / 174 mm)
-PORT_EDGE = OUTER - 9.8  # how far (from the face centre) the cells above the ports reach (35 / 82)
+LIT_SPAN = 2 * (OUTER - RIM)  # lit width on the outside of each face (80 / 94 mm)
+PORT_EDGE = OUTER - 9.8  # how far (from the face centre) the cells above the ports reach (35 / 42)
 
 # ---------------------------------------------------------------- pins
 PIN_D = 2.1  # for 2 mm dowels or 1.75 mm filament
 PIN_DEPTH = 3.0  # per side; must stay clear of the funnel cells
-PIN_ALONG = (25.0,) if PROFILE == "8x8" else (25.0, 60.0)  # pin positions along each edge: +-each
-PIN_AT = OUTER - 7.8  # where the pin axis meets the mitre (x = z = PIN_AT): 37 / 84
+PIN_ALONG = (25.0,) if PROFILE == "65x65" else (30.0,)  # pin positions along each edge: +-each
+PIN_AT = OUTER - 7.8  # where the pin axis meets the mitre (x = z = PIN_AT): 37 / 44
 
 # ---------------------------------------------------------------- USB-C + switch (cube coordinates; front = +Z, bottom = -Y)
 # All twelve cube edges carry a 45 degree bevel BEVEL_S deep (measured square

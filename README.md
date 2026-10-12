@@ -7,7 +7,7 @@ A **fluid physics simulation** of gravity-responsive particles on a 3D LED cube,
 
 Both versions share the same fluid physics simulation core with continuous particle movement, velocity tracking, and collision detection, demonstrating the power of hexagonal architecture for code reuse across platforms.
 
-**Enclosure:** a 3D-printable translucent case for the cube. You can [view it in 3D and download the STLs](https://psytraxx.github.io/gravity-cube-rs/voxel-shell/viewer.html). Details are in [Enclosure](#-enclosure).
+**Enclosure:** a 3D-printable translucent case for the cube. You can [view it in 3D and download the STLs](https://psytraxx.github.io/gravity-cube-rs/voxel-shell-65x65/viewer.html). Details are in [Enclosure](#-enclosure).
 
 ---
 
@@ -34,8 +34,8 @@ gravity-cube-rs/
 │   └── Cargo.toml
 ├── case/                   # 3D-printable enclosure (published to GitHub Pages)
 │   ├── concepts.html       # Comparison of five frame concepts
-│   ├── voxel-shell/        # STLs, generator, fit checks, 3D viewer
-│   └── voxel-shell-16x16/  # same enclosure for 16x16 flexible panels
+│   ├── voxel-shell-65x65/  # STLs, generator, fit checks, 3D viewer
+│   └── voxel-shell-80x80/  # same enclosure for 80 x 80 mm flexible 8x8 panels
 └── desktop/                # Desktop simulator
     ├── shaders/            # WGSL shaders (vertex, fragment, wireframe)
     ├── src/
@@ -245,12 +245,12 @@ If LEDs don't light:
 
 ## 📦 Enclosure
 
-The **Voxel Shell** is an 89.6 mm cube made of six mitred face shells, printed in translucent resin. Each shell holds one 65 × 66 mm WS2812 8×8 panel behind an 8×8 light grid and a diffuser skin, so every LED shows as a square pixel. A snap-in USB-C socket and an SS12F15 slide switch sit on the bottom front edge.
+The **Voxel Shell 65×65** is an 89.6 mm cube made of six mitred face shells, printed in translucent resin. Each shell holds one 65 × 66 mm WS2812 8×8 panel behind an 8×8 light grid and a diffuser skin, so every LED shows as a square pixel. A snap-in USB-C socket and an SS12F15 slide switch sit on the bottom front edge.
 
-- [Interactive 3D viewer and STL downloads](https://psytraxx.github.io/gravity-cube-rs/voxel-shell/viewer.html)
+- [Interactive 3D viewer and STL downloads](https://psytraxx.github.io/gravity-cube-rs/voxel-shell-65x65/viewer.html)
 - [Frame concepts that were compared](https://psytraxx.github.io/gravity-cube-rs/concepts.html)
-- Source, parts list and assembly steps: [`case/voxel-shell/README.md`](case/voxel-shell/README.md)
-- 16×16 version (183.6 mm cube, flexible 160 × 160 mm panels): [3D viewer](https://psytraxx.github.io/gravity-cube-rs/voxel-shell-16x16/viewer.html), [`case/voxel-shell-16x16/README.md`](case/voxel-shell-16x16/README.md)
+- Source, parts list and assembly steps: [`case/voxel-shell-65x65/README.md`](case/voxel-shell-65x65/README.md)
+- **Voxel Shell 80×80** (103.6 mm cube, flexible 80 × 80 mm 8×8 panels, same firmware): [3D viewer](https://psytraxx.github.io/gravity-cube-rs/voxel-shell-80x80/viewer.html), [`case/voxel-shell-80x80/README.md`](case/voxel-shell-80x80/README.md)
 
 The site is published from `case/` by `.github/workflows/pages.yml` on every push to `main` that changes it.
 

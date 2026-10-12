@@ -5,8 +5,8 @@ Every check builds solids with manifold3d and measures overlap volume; any
 overlap above 0.001 mm3 fails. The four plain shells can be fitted with the
 long side of their panel either way round, so all 16 combinations are tested.
 
-    python3 check_fit.py                        # 8x8
-    VOXEL_PROFILE=16x16 python3 check_fit.py    # 16x16
+    python3 check_fit.py                        # 65 mm panels
+    VOXEL_PROFILE=80x80 python3 check_fit.py    # 80 mm panels
 """
 
 import itertools
@@ -54,7 +54,7 @@ def grown(m, d=0.4):
 
 print("== one shell and its own panel")
 offsets = [("LED grid centred", 0, 0)]
-off = (g.PANEL_Y - g.GRID_SPAN) / 2  # 8x8: the grid may sit at either end of the 66 mm side
+off = (g.PANEL_Y - g.GRID_SPAN) / 2  # 65 mm boards: the grid may sit at either end of the 66 mm side
 if off:
     offsets.append((f"LED grid {off} mm off-centre on the {g.PANEL_Y:g} mm side", 0, off))
 for label, dx, dy in offsets:
