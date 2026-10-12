@@ -117,7 +117,7 @@ code { font-family: var(--font-mono); font-size: 13px; }
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
 <script>
 (() => {
-  // panel profile (mirrors generate.py; the 16x16 viewer differs only in this block and the page text)
+  // panel profile (mirrors generate.py; the 80 mm viewer differs only in this block and the page text)
   const CFG = { N: 8, PCB_X: 65, PCB_Y: 66, T: 1.6, GRID_DEPTH: 7.7, PORT_COLS: [2, 3, 4, 5] };
   const N = CFG.N, S = CFG.PCB_X, H = S / 2, T = CFG.T, PITCH = S / N;
   const PCB_X = CFG.PCB_X, PCB_Y = CFG.PCB_Y, Z_BACK = Math.max(PCB_X, PCB_Y) / 2 + 1.5, Z_PCB = Z_BACK + T;

@@ -104,6 +104,6 @@ python3 generate.py
 python3 check_fit.py   # must end with "All checks passed."
 ```
 
-All dimensions are constants at the top of `generate.py`. `VOXEL_PROFILE=16x16`
-builds the 183.6 mm version for flexible 160 × 160 mm 16×16 panels into
-[`../voxel-shell-16x16/`](../voxel-shell-16x16/README.md).
+All dimensions are constants at the top of `generate.py`. `VOXEL_PROFILE=80mm`
+builds the 103.6 mm version for flexible 80 × 80 mm 8×8 panels into
+[`../voxel-shell-80mm/`](../voxel-shell-80mm/README.md).
