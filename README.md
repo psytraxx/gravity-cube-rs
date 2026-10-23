@@ -165,7 +165,7 @@ Runs on ESP32 hardware with real IMU sensor and LED cube.
 
 ### Hardware Requirements
 
-- **MCU**: ESP32 (tested on ESP32, not ESP32-S3)
+- **MCU**: ESP32-S3 (target `xtensa-esp32s3-none-elf`)
 - **IMU**: BMI160 accelerometer (SPI)
 - **LEDs**: 384× WS2812B (6 panels of 8×8)
 - **LED Control**: RMT peripheral via GPIO 16
@@ -173,13 +173,21 @@ Runs on ESP32 hardware with real IMU sensor and LED cube.
 ### Pin Configuration
 
 **BMI160 IMU (SPI)**:
-- MOSI: GPIO 23
-- MISO: GPIO 19
-- SCLK: GPIO 18
-- CS: GPIO 5
+- MOSI: GPIO 11
+- MISO: GPIO 13
+- SCLK: GPIO 12
+- CS: GPIO 10
 
 **WS2812 LEDs (RMT)**:
-- DATA: GPIO 16
+- DATA: GPIO 16 → 74AHCT125 (5 V) → 330 Ω → IN of panel 0
+
+**Panel chain** (data jumper from each panel's OUT to the next panel's IN; power is dropped to every panel's IN header separately):
+
+```
+0 Left → 1 Front → 2 Right → 3 Back → 4 Top → 5 Bottom
+```
+
+Each panel has IN at the bottom-left and scans row by row to OUT at the top-right. Front is the North face (`y == 0`); Left/Right/Back/Top/Bottom map to East/West/South/Up/Down. The IMU must be mounted so its axes match these faces.
 
 ### Prerequisites
 
@@ -203,7 +211,7 @@ cargo install espflash
 ### Building
 
 ```bash
-# Make sure the Xtensa toolchain (incl. xtensa-esp32-elf-gcc linker) is on PATH
+# Make sure the Xtensa toolchain (incl. xtensa-esp32s3-elf-gcc linker) is on PATH
 . $HOME/export-esp.sh
 
 # Navigate to firmware directory
@@ -220,7 +228,7 @@ cargo build --release
 cargo run --release
 
 # Or specify port explicitly
-espflash flash --monitor target/xtensa-esp32-none-elf/release/firmware
+espflash flash --monitor target/xtensa-esp32s3-none-elf/release/firmware
 ```
 
 ### Configuration
@@ -289,7 +297,7 @@ The site is published from `case/` by `.github/workflows/pages.yml` on every pus
 
 ### Panel Mapping (Firmware Only)
 
-The physical LED cube has 6 panels, each with different orientations:
+The physical LED cube has 6 panels chained in the order Left, Front, Right, Back, Top, Bottom, each with a different orientation on the cube:
 
 - Pre-computed lookup table (512 entries for 8³ positions)
 - Handles rotations: 0°, 90°, 180°, 270°

@@ -39,12 +39,10 @@ where
     RMT: SmartLedsWriteAsync<Color = C>,
     C: From<(u8, u8, u8)> + Default + Copy,
 {
-    /// Clear all LEDs (async version for firmware)
+    /// Clear the frame buffer. Nothing is sent to the LEDs until `refresh`, so the
+    /// cube never shows a blank frame between updates.
     pub async fn clear(&mut self) -> Result<(), RMT::Error> {
         self.clear_buffer();
-        self.driver
-            .write(self.buffer[..self.max_leds].iter().cloned())
-            .await?;
         Ok(())
     }
 

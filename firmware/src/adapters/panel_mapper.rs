@@ -1,3 +1,6 @@
+#[cfg(test)]
+extern crate alloc;
+
 use gravity_cube_core::{Direction, PanelConfig, Position};
 
 /// Panel mapper converts 3D cube coordinates to 2D panel LED indices
@@ -9,46 +12,54 @@ pub struct PanelMapper {
 
 impl PanelMapper {
     pub fn new(cube_size: u8) -> Self {
-        // Default panel configuration from C code
+        // Chain order follows the WLED wiring: OUT of each panel feeds IN of the next.
+        // Every panel has IN at its bottom-left and scans row by row up to OUT at the
+        // top-right. Faces are named as in the unfolded cross (Front = North).
         let panels = [
+            // 0 · Left
             PanelConfig {
                 panel_num: 0,
                 orientation: 0,
-                direction: Direction::West,
+                direction: Direction::East,
                 inverted_x: true,
-                inverted_y: false,
+                inverted_y: true,
             },
+            // 1 · Front
             PanelConfig {
                 panel_num: 1,
                 orientation: 0,
                 direction: Direction::North,
-                inverted_x: true,
-                inverted_y: false,
+                inverted_x: false,
+                inverted_y: true,
             },
+            // 2 · Right
             PanelConfig {
                 panel_num: 2,
-                orientation: 270,
+                orientation: 0,
+                direction: Direction::West,
+                inverted_x: false,
+                inverted_y: true,
+            },
+            // 3 · Back
+            PanelConfig {
+                panel_num: 3,
+                orientation: 0,
+                direction: Direction::South,
+                inverted_x: true,
+                inverted_y: true,
+            },
+            // 4 · Top
+            PanelConfig {
+                panel_num: 4,
+                orientation: 0,
                 direction: Direction::Up,
                 inverted_x: false,
                 inverted_y: false,
             },
-            PanelConfig {
-                panel_num: 3,
-                orientation: 270,
-                direction: Direction::South,
-                inverted_x: false,
-                inverted_y: false,
-            },
-            PanelConfig {
-                panel_num: 4,
-                orientation: 270,
-                direction: Direction::East,
-                inverted_x: false,
-                inverted_y: false,
-            },
+            // 5 · Bottom
             PanelConfig {
                 panel_num: 5,
-                orientation: 90,
+                orientation: 0,
                 direction: Direction::Down,
                 inverted_x: false,
                 inverted_y: true,
@@ -194,5 +205,47 @@ impl<'a> Iterator for PanelLedIndices<'a> {
         }
 
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn leds(m: &PanelMapper, x: u8, y: u8, z: u8) -> alloc::vec::Vec<u16> {
+        m.position_to_led_indices(Position { x, y, z }).collect()
+    }
+
+    #[test]
+    fn every_led_is_hit_exactly_once() {
+        let m = PanelMapper::new(8);
+        let mut hits = [0u8; 384];
+        for x in 0..8 {
+            for y in 0..8 {
+                for z in 0..8 {
+                    for i in leds(&m, x, y, z) {
+                        hits[i as usize] += 1;
+                    }
+                }
+            }
+        }
+        assert!(hits.iter().all(|&h| h == 1));
+    }
+
+    #[test]
+    fn chain_corners_match_wiring_diagram() {
+        let m = PanelMapper::new(8);
+        // Left OUT (top-right, LED 63) and Front's top-left LED are the same voxel.
+        assert!(leds(&m, 0, 0, 0).contains(&63));
+        assert!(leds(&m, 0, 0, 0).contains(&(64 + 56)));
+        // Front IN (LED 64) sits on the bottom edge next to Left's bottom-right LED (7).
+        assert!(leds(&m, 0, 0, 7).contains(&64));
+        assert!(leds(&m, 0, 0, 7).contains(&7));
+        // Front OUT (top-right, LED 127) and Right's top-left LED are the same voxel.
+        assert!(leds(&m, 7, 0, 0).contains(&127));
+        assert!(leds(&m, 7, 0, 0).contains(&(128 + 56)));
+        // Top IN (bottom-left, LED 256) borders Front's top-left LED.
+        assert!(leds(&m, 0, 0, 0).contains(&256));
+        assert!(leds(&m, 0, 0, 0).contains(&(64 + 56)));
     }
 }

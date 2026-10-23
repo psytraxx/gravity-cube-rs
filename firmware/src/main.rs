@@ -8,6 +8,7 @@
 
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
+use embedded_hal::spi::{Operation, SpiDevice};
 use esp_backtrace as _;
 use esp_hal::clock::CpuClock;
 use esp_hal::delay::Delay;
@@ -39,7 +40,7 @@ async fn main(_spawner: Spawner) -> ! {
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
 
-    esp_alloc::heap_allocator!(#[unsafe(link_section = ".dram2_uninit")] size: 98767);
+    esp_alloc::heap_allocator!(size: 98767);
 
     let timg0 = TimerGroup::new(peripherals.TIMG0);
     esp_rtos::start(timg0.timer0, peripherals.FROM_CPU_INTR0);
@@ -55,29 +56,46 @@ async fn main(_spawner: Spawner) -> ! {
     info!("Configuring hardware peripherals...");
 
     // Pin assignments for BMI160 IMU (SPI):
-    // - MOSI:  GPIO 23
-    // - MISO:  GPIO 19
-    // - SCLK:  GPIO 18
-    // - CS:    GPIO 5
+    // - MOSI:  GPIO 11
+    // - MISO:  GPIO 13
+    // - SCLK:  GPIO 12
+    // - CS:    GPIO 10
 
     // Pin assignment for WS2812 LEDs (RMT):
-    // - DATA:  GPIO 16 (changed from 37 for ESP32 compatibility)
+    // - DATA:  GPIO 16 (via 74AHCT125 level shifter + 330 ohm)
 
     // Initialize SPI for BMI160 IMU
     info!("  • Setting up SPI for BMI160 IMU...");
     let config = SpiConfig::default().with_frequency(Rate::from_mhz(1));
     let spi_bus = Spi::new(peripherals.SPI2, config) // 1 MHz for BMI160
         .expect("Failed to create SPI")
-        .with_sck(peripherals.GPIO18)
-        .with_mosi(peripherals.GPIO23)
-        .with_miso(peripherals.GPIO19);
+        .with_sck(peripherals.GPIO12)
+        .with_mosi(peripherals.GPIO11)
+        .with_miso(peripherals.GPIO13);
 
-    let cs = esp_hal::gpio::Output::new(peripherals.GPIO5, Level::High, OutputConfig::default());
-    let spi_device = embedded_hal_bus::spi::ExclusiveDevice::new(spi_bus, cs, Delay::new())
+    let cs = esp_hal::gpio::Output::new(peripherals.GPIO10, Level::High, OutputConfig::default());
+    let mut spi_device = embedded_hal_bus::spi::ExclusiveDevice::new(spi_bus, cs, Delay::new())
         .expect("Failed to create SPI device");
 
+    // Probe the chip ID before handing the bus to the driver. The first read
+    // (BMI160 register 0x7F) only produces the CS edge that switches it into SPI mode.
+    let mut read_reg = |reg: u8| -> Option<u8> {
+        let mut val = [0u8];
+        spi_device
+            .transaction(&mut [Operation::Write(&[0x80 | reg]), Operation::Read(&mut val)])
+            .ok()
+            .map(|_| val[0])
+    };
+    let _ = read_reg(0x7F);
+    Delay::new().delay_millis(2);
+    info!(
+        "  • SPI probe: BMI160 CHIP_ID(0x00)={:02X?} (expect D1), LSM6DS3 WHO_AM_I(0x0F)={:02X?} (expect 69)",
+        read_reg(0x00),
+        read_reg(0x0F)
+    );
+
     // Initialize BMI160 IMU
-    let mut imu_opt = match Bmi160Adapter::new(spi_device) {
+    let mut imu_opt = match Bmi160Adapter::new(spi_device, &mut Delay::new()) {
         Ok(imu) => {
             info!("  ✓ BMI160 IMU initialized successfully");
             Some(imu)
@@ -85,10 +103,10 @@ async fn main(_spawner: Spawner) -> ! {
         Err(_) => {
             warn!("  ✗ Failed to initialize BMI160 IMU");
             warn!("    Check your wiring:");
-            warn!("      MOSI → GPIO 23");
-            warn!("      MISO → GPIO 19");
-            warn!("      SCLK → GPIO 18");
-            warn!("      CS   → GPIO 5");
+            warn!("      MOSI → GPIO 11");
+            warn!("      MISO → GPIO 13");
+            warn!("      SCLK → GPIO 12");
+            warn!("      CS   → GPIO 10");
             warn!("    Continuing with default gravity (pointing down)");
             None
         }

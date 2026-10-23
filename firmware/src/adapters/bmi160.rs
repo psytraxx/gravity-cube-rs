@@ -1,4 +1,5 @@
 use bmi160::Bmi160;
+use embedded_hal::delay::DelayNs;
 use embedded_hal::spi::SpiDevice;
 use gravity_cube_core::{Vector3D, Vector3DExt};
 
@@ -25,19 +26,26 @@ impl<SPI, E> Bmi160Adapter<SPI>
 where
     SPI: SpiDevice<Error = E>,
 {
-    pub fn new(spi: SPI) -> Result<Self, Bmi160Error<E>> {
+    pub fn new(spi: SPI, delay: &mut impl DelayNs) -> Result<Self, Bmi160Error<E>> {
         let mut sensor = Bmi160::new_with_spi(spi);
+        delay.delay_ms(10);
 
         // Initialize the sensor with default configuration
         // This sets up power modes and enables the accelerometer
         sensor
             .set_accel_power_mode(bmi160::AccelerometerPowerMode::Normal)
             .map_err(Bmi160Error::Sensor)?;
+        // The accelerometer needs a few ms to leave suspend; reading earlier returns zeros.
+        delay.delay_ms(80);
 
         // Set accelerometer range to ±2g (matches our ACCEL_SCALE constant)
         sensor
             .set_accel_range(bmi160::AccelerometerRange::G2)
             .map_err(Bmi160Error::Sensor)?;
+        delay.delay_ms(10);
+
+        let power_mode = sensor.power_mode().map_err(Bmi160Error::Sensor)?;
+        log::info!("BMI160 power mode: accel={:?}", power_mode.accel);
 
         let adapter = Self {
             sensor,

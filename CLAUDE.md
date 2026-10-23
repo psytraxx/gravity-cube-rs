@@ -19,7 +19,7 @@ This is a Cargo workspace with three crates:
   - Domain logic: effect.rs, effects/, types.rs, physics_utils.rs
 
 - **firmware/**: ESP32 binary
-  - Target: `xtensa-esp32-none-elf`
+  - Target: `xtensa-esp32s3-none-elf` (ESP32-S3)
   - Toolchain: ESP Rust (channel = "esp")
   - Runtime: `esp-rtos` with Embassy async
   - Adapters: BMI160 IMU, WS2812 LEDs, PanelMapper
@@ -74,13 +74,14 @@ The firmware runner is configured in `firmware/.cargo/config.toml` to use `espfl
 As documented in `firmware/src/main.rs`:
 
 **BMI160 IMU (SPI):**
-- MOSI: GPIO 23
-- MISO: GPIO 19
-- SCLK: GPIO 18
-- CS: GPIO 5
+- MOSI: GPIO 11
+- MISO: GPIO 13
+- SCLK: GPIO 12
+- CS: GPIO 10
 
 **WS2812 LEDs (RMT):**
-- DATA: GPIO 16 (384 LEDs total: 6 panels × 64 LEDs)
+- DATA: GPIO 16 via 74AHCT125 level shifter + 330 Ω (384 LEDs total: 6 panels × 64 LEDs)
+- Chain order: 0 Left (East), 1 Front (North), 2 Right (West), 3 Back (South), 4 Top (Up), 5 Bottom (Down); OUT → IN jumpers, IN at bottom-left, OUT at top-right of each panel
 
 ## Architecture
 
@@ -163,7 +164,7 @@ Embassy async tasks orchestrating the main loop:
 Uses ESP32 hardware RNG wrapped in `SimpleRng` struct. The `next_bool()` method uses `is_multiple_of(2)` for random left/right particle movement preferences.
 
 ### Memory Allocation
-- Custom heap allocator in DRAM2: `esp_alloc::heap_allocator!(size: 98767)`
+- Heap allocator: `esp_alloc::heap_allocator!(size: 98767)` (the ESP32-only DRAM2 section is too small on the S3)
 - No-std environment with alloc crate
 
 ### Fluid Physics Simulation
