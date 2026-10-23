@@ -16,14 +16,14 @@ gravity-cube-core = { workspace = true, default-features = false }
 micromath.workspace = true
 
 # ESP32 dependencies
-esp-hal = { version = "1.2.2", features = ["esp32", "log-04", "unstable"] }
+esp-hal = { version = "1.2.2", features = ["esp32s3", "log-04", "unstable"] }
 esp-rtos = { version = "0.4.0", features = [
   "embassy",
   "esp-alloc",
-  "esp32",
+  "esp32s3",
   "log-04",
 ] }
-esp-bootloader-esp-idf = { version = "0.6.0", features = ["esp32", "log-04"] }
+esp-bootloader-esp-idf = { version = "0.6.0", features = ["esp32s3", "log-04"] }
 log.workspace = true
 
 # Async runtime
@@ -31,11 +31,11 @@ embassy-executor = { version = "0.10.0", features = ["log"] }
 embassy-time = { version = "0.5.1", features = ["log"] }
 esp-alloc = "0.11.0"
 esp-backtrace = { version = "0.20.0", features = [
-  "esp32",
+  "esp32s3",
   "panic-handler",
   "println",
 ] }
-esp-println = { version = "0.18.0", features = ["esp32", "log-04"] }
+esp-println = { version = "0.18.0", features = ["esp32s3", "log-04"] }
 
 critical-section = "1.2.0"
 
