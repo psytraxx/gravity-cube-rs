@@ -106,9 +106,10 @@ Core business logic with no hardware dependencies:
 Key fluid simulation algorithm:
 - Continuous floating-point particle positions (not grid-locked)
 - Per-particle velocity tracking with smoothing and decay
-- Boundary collision with damping (particles bounce off walls)
-- O(n²) particle-particle collision detection and response
-- Velocity averaging for energy conservation
+- Position-based collisions: overlaps are resolved in a few passes, then velocity is
+  derived from the distance actually moved (blocked particles come to rest)
+- Spatial-grid particle-particle collision detection
+- Display hysteresis: a particle's LED only moves once it is clearly in the next cell
 
 ### 2. Adapters Layer (Platform-Specific)
 
@@ -179,18 +180,19 @@ The simulation uses a continuous floating-point particle system with fluid-like 
 **Physics Algorithm (per frame):**
 1. **Velocity Update**: `v = v * smoothing + (gravity * strength)`
    - Velocity smoothing: 0.9 (creates smooth acceleration)
-   - Gravity strength: 0.08
+   - Gravity strength: 0.08 (times 0.3 acceleration scale)
 2. **Velocity Clamping**: Limit to ±0.6 max velocity
-3. **Position Update**: `position += velocity`
-4. **Boundary Collision**: Reflect velocity with 0.92 damping when hitting walls
-5. **Velocity Decay**: `v *= 0.95` (friction/air resistance)
-6. **Particle Collision** (O(n²)):
+3. **Predict Position**: `position += velocity`, clamped to the cube walls
+4. **Particle Collision** (spatial grid, 3 solver passes):
    - Detect particles within distance < 1.0
-   - Separate overlapping particles
-   - Average velocities for energy conservation
+   - Push each overlapping pair apart by 0.8 × overlap per pass, clamped to the walls
+5. **Velocity from Displacement**: `v = (position - previous) * 0.95`
+   - A particle blocked by a wall or its neighbours ends up with zero velocity, so piles come to rest
 
 **Display Conversion:**
 - Continuous positions rounded to nearest grid cell for LED display
+- Fluid effect: a particle's displayed cell only changes once it is more than 0.65 from the
+  cell centre, so particles resting on a cell boundary do not flicker
 - Desktop renderer keeps fastest particle per cell for brightness feedback
 
 ### Simulation Configuration

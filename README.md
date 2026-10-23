@@ -282,16 +282,12 @@ The site is published from `case/` by `.github/workflows/pages.yml` on every pus
      - Smoothing factor: 0.9 (creates smooth acceleration)
      - Gravity strength: 0.08
    - **Velocity Clamping**: Limit to ±0.6 max velocity
-   - **Position Update**: `position += velocity`
-   - **Boundary Collision**: Reflect velocity with 0.92 damping when hitting walls
-   - **Velocity Decay**: `v *= 0.95` (simulates friction/air resistance)
-   - **Particle Collision** (O(n²)):
-     - Detect particles within distance < 1.0
-     - Separate overlapping particles with repulsion force
-     - Average velocities for energy conservation
+   - **Predict Position**: `position += velocity`, clamped to the cube walls
+   - **Particle Collision** (spatial grid, 3 solver passes): push overlapping pairs apart in proportion to their overlap
+   - **Velocity from Displacement**: `v = (position - previous) * 0.95`, so particles blocked by walls or neighbours come to rest
 
 4. **Display Update**:
-   - Continuous particle positions rounded to nearest grid cell
+   - Continuous particle positions rounded to nearest grid cell, with hysteresis so particles on a cell boundary don't flicker
    - Firmware: Map 3D grid positions to 2D LED panel indices
    - Desktop: Keep fastest particle per cell for brightness feedback, render with GPU instancing
 
