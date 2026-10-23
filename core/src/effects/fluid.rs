@@ -4,7 +4,6 @@
 //! It uses spatial grid hashing for efficient O(n) average-case collision detection.
 
 use crate::effect::SimulationEffect;
-use crate::physics_utils;
 use crate::types::*;
 
 #[cfg(not(feature = "std"))]
@@ -13,9 +12,6 @@ use micromath::F32Ext;
 
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
-
-use log::info;
-use micromath::vector::Vector;
 
 /// Collision detection threshold - particles closer than this distance will repel.
 const COLLISION_THRESHOLD: f32 = 1.0;
@@ -37,9 +33,6 @@ const GRAVITY: f32 = 0.08;
 /// Higher values (0.4-0.5) make it more dynamic but can become unstable.
 const ACCELERATION_SCALE: f32 = 0.3;
 
-/// Velocity retention on boundary collision (0.0-1.0).
-const DAMPING: f32 = 0.92;
-
 /// Maximum velocity per axis.
 const MAX_VELOCITY: f32 = 0.6;
 
@@ -49,11 +42,15 @@ const VELOCITY_SMOOTHING: f32 = 0.9;
 /// Velocity decay per step - friction (0.0-1.0).
 const VELOCITY_DECAY: f32 = 0.95;
 
-/// Particle collision repulsion strength.
-const COLLISION_REPULSION: f32 = 0.5;
+/// Fraction of the overlap between two particles corrected per solver pass (0.0-1.0).
+const COLLISION_STIFFNESS: f32 = 0.8;
 
-/// Energy loss during particle collisions.
-const COLLISION_DAMPING: f32 = 0.3;
+/// Collision solver passes per step. More passes keep a deep pile from compressing.
+const SOLVER_ITERATIONS: usize = 3;
+
+/// How far (in cells) a particle must move from its displayed cell's centre before its LED
+/// moves. Values above 0.5 stop particles sitting on a cell boundary from flickering.
+const DISPLAY_HYSTERESIS: f32 = 0.65;
 
 /// Neighbor offsets for spatial grid lookups (27 neighbors including self).
 const NEIGHBOR_OFFSETS: [(i32, i32, i32); 27] = [
@@ -201,6 +198,10 @@ pub struct FluidSimulation {
     config: Config,
     /// Spatial grid for efficient collision detection.
     grid: SpatialGrid,
+    /// Displayed cell per particle, updated with hysteresis.
+    cells: Vec<Position>,
+    /// Positions at the start of the current step, used to derive velocities.
+    previous: Vec<Vector3D>,
 }
 
 impl SimulationEffect for FluidSimulation {
@@ -210,11 +211,14 @@ impl SimulationEffect for FluidSimulation {
             particles: Vec::new(),
             config,
             grid,
+            cells: Vec::new(),
+            previous: Vec::new(),
         }
     }
 
     fn populate(&mut self, num_particles: usize) {
         self.particles.clear();
+        self.cells.clear();
         let mut index = 0;
 
         let fill_height = self.config.cube_size / 2;
@@ -239,58 +243,65 @@ impl SimulationEffect for FluidSimulation {
     }
 
     fn step(&mut self, acceleration: &Vector3D) {
-        let size = self.config.cube_size as f32;
-        let bound = size - 1.0;
-
-        self.log_step_info(acceleration);
-
-        // Pre-compute scaled acceleration
+        let bound = self.config.cube_size as f32 - 1.0;
         let scaled_accel = *acceleration * (ACCELERATION_SCALE * GRAVITY);
-        let smoothing = VELOCITY_SMOOTHING;
-        let max_vel = MAX_VELOCITY;
-        let damping = DAMPING;
-        let decay = VELOCITY_DECAY;
 
-        // Update each particle's velocity and position
+        // Integrate velocity and move every particle to its predicted position
+        self.previous.clear();
         for particle in self.particles.iter_mut() {
-            // Update velocity with acceleration
-            particle.velocity.x = particle.velocity.x * smoothing + scaled_accel.x;
-            particle.velocity.y = particle.velocity.y * smoothing + scaled_accel.y;
-            particle.velocity.z = particle.velocity.z * smoothing + scaled_accel.z;
+            self.previous.push(particle.position);
 
-            // Constrain velocity
-            particle.velocity.x = particle.velocity.x.clamp(-max_vel, max_vel);
-            particle.velocity.y = particle.velocity.y.clamp(-max_vel, max_vel);
-            particle.velocity.z = particle.velocity.z.clamp(-max_vel, max_vel);
+            particle.velocity = particle.velocity * VELOCITY_SMOOTHING + scaled_accel;
+            particle.velocity.x = particle.velocity.x.clamp(-MAX_VELOCITY, MAX_VELOCITY);
+            particle.velocity.y = particle.velocity.y.clamp(-MAX_VELOCITY, MAX_VELOCITY);
+            particle.velocity.z = particle.velocity.z.clamp(-MAX_VELOCITY, MAX_VELOCITY);
 
-            // Update position
-            particle.position.x += particle.velocity.x;
-            particle.position.y += particle.velocity.y;
-            particle.position.z += particle.velocity.z;
-
-            // Apply boundary collisions with bounce
-            physics_utils::apply_boundary_3d(
-                &mut particle.position,
-                &mut particle.velocity,
-                bound,
-                damping,
-            );
-
-            // Additional velocity decay
-            particle.velocity *= decay;
+            particle.position += particle.velocity;
+            clamp_to_cube(&mut particle.position, bound);
         }
 
-        // Build spatial grid for collision detection
+        // Push overlapping particles apart, keeping them inside the cube
+        for _ in 0..SOLVER_ITERATIONS {
+            self.resolve_collisions();
+            for particle in self.particles.iter_mut() {
+                clamp_to_cube(&mut particle.position, bound);
+            }
+        }
+
+        // Velocity is the distance actually travelled: a particle blocked by a wall or
+        // by its neighbours ends up at rest instead of pressing on forever
+        for (particle, previous) in self.particles.iter_mut().zip(self.previous.iter()) {
+            particle.velocity = (particle.position - *previous) * VELOCITY_DECAY;
+        }
+
+        self.update_cells();
+    }
+
+    fn particles(&self) -> &[Particle] {
+        &self.particles
+    }
+
+    fn active_pixels(&self) -> impl Iterator<Item = Pixel> + '_ {
+        self.particles.iter().enumerate().map(|(i, p)| {
+            let cell = self.cells.get(i).copied().unwrap_or(p.grid_position());
+            Pixel::new(cell.x, cell.y, cell.z)
+        })
+    }
+
+    fn config(&self) -> &Config {
+        &self.config
+    }
+}
+
+impl FluidSimulation {
+    /// One solver pass: separate every overlapping pair in proportion to its overlap.
+    fn resolve_collisions(&mut self) {
         self.grid.clear(self.particles.len());
         for (i, particle) in self.particles.iter().enumerate() {
             self.grid.insert(i as u16, &particle.position);
         }
 
-        // Particle collision detection using spatial grid
-        let repulsion_factor = COLLISION_REPULSION * 0.5 * COLLISION_DAMPING;
-        let particle_count = self.particles.len();
-
-        for i in 0..particle_count {
+        for i in 0..self.particles.len() {
             let pos_i = self.particles[i].position;
 
             // Only check particles in neighboring cells
@@ -305,73 +316,48 @@ impl SimulationEffect for FluidSimulation {
                         continue;
                     }
 
-                    let dx = self.particles[j].position.x - self.particles[i].position.x;
-                    let dy = self.particles[j].position.y - self.particles[i].position.y;
-                    let dz = self.particles[j].position.z - self.particles[i].position.z;
-                    let dist_squared = dx * dx + dy * dy + dz * dz;
+                    let delta = self.particles[j].position - self.particles[i].position;
+                    let dist_squared = delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
 
                     if dist_squared < COLLISION_THRESHOLD && dist_squared > MIN_DISTANCE_SQUARED {
                         let dist = dist_squared.sqrt();
-                        let inv_dist = 1.0 / dist;
-
-                        // Normalize direction vector and apply repulsion
-                        let rx = dx * inv_dist * repulsion_factor;
-                        let ry = dy * inv_dist * repulsion_factor;
-                        let rz = dz * inv_dist * repulsion_factor;
-
-                        // Separate particles
-                        self.particles[i].position.x -= rx;
-                        self.particles[i].position.y -= ry;
-                        self.particles[i].position.z -= rz;
-                        self.particles[j].position.x += rx;
-                        self.particles[j].position.y += ry;
-                        self.particles[j].position.z += rz;
-
-                        // Average velocities
-                        let avg_vel_x =
-                            (self.particles[i].velocity.x + self.particles[j].velocity.x) * 0.5;
-                        let avg_vel_y =
-                            (self.particles[i].velocity.y + self.particles[j].velocity.y) * 0.5;
-                        let avg_vel_z =
-                            (self.particles[i].velocity.z + self.particles[j].velocity.z) * 0.5;
-
-                        self.particles[i].velocity.x = avg_vel_x;
-                        self.particles[i].velocity.y = avg_vel_y;
-                        self.particles[i].velocity.z = avg_vel_z;
-                        self.particles[j].velocity.x = avg_vel_x;
-                        self.particles[j].velocity.y = avg_vel_y;
-                        self.particles[j].velocity.z = avg_vel_z;
+                        let push = (COLLISION_THRESHOLD - dist) * 0.5 * COLLISION_STIFFNESS;
+                        let offset = delta * (push / dist);
+                        self.particles[i].position -= offset;
+                        self.particles[j].position += offset;
                     }
                 }
             }
         }
     }
 
-    fn particles(&self) -> &[Particle] {
-        &self.particles
-    }
-
-    fn active_pixels(&self) -> impl Iterator<Item = Pixel> + '_ {
-        self.particles.iter().map(|p| {
-            let grid_pos = p.grid_position();
-            Pixel::new(grid_pos.x, grid_pos.y, grid_pos.z)
-        })
-    }
-
-    fn config(&self) -> &Config {
-        &self.config
+    /// Move each particle's displayed cell only once it has clearly left it.
+    fn update_cells(&mut self) {
+        let start = self.cells.len();
+        for p in &self.particles[start.min(self.particles.len())..] {
+            self.cells.push(p.grid_position());
+        }
+        for (cell, p) in self.cells.iter_mut().zip(self.particles.iter()) {
+            let target = p.grid_position();
+            if (p.position.x - cell.x as f32).abs() > DISPLAY_HYSTERESIS {
+                cell.x = target.x;
+            }
+            if (p.position.y - cell.y as f32).abs() > DISPLAY_HYSTERESIS {
+                cell.y = target.y;
+            }
+            if (p.position.z - cell.z as f32).abs() > DISPLAY_HYSTERESIS {
+                cell.z = target.z;
+            }
+        }
     }
 }
 
-impl FluidSimulation {
-    fn log_step_info(&self, acceleration: &Vector3D) {
-        let magnitude = acceleration.magnitude();
-        info!("=== Simulation Step ===");
-        info!(
-            "Acceleration: ({:.2}, {:.2}, {:.2}) |{:.2}|g",
-            acceleration.x, acceleration.y, acceleration.z, magnitude
-        );
-    }
+/// Keep a position inside the cube on every axis.
+#[inline]
+fn clamp_to_cube(position: &mut Vector3D, bound: f32) {
+    position.x = position.x.clamp(0.0, bound);
+    position.y = position.y.clamp(0.0, bound);
+    position.z = position.z.clamp(0.0, bound);
 }
 
 #[cfg(test)]
@@ -548,7 +534,8 @@ mod tests {
         let particle = Particle::new(2.7, 5.3, 7.9);
         let grid_pos = particle.grid_position();
 
-        assert_eq!(grid_pos.x, 2);
+        // Rounds to the nearest cell
+        assert_eq!(grid_pos.x, 3);
         assert_eq!(grid_pos.y, 5);
         assert_eq!(grid_pos.z, 7);
     }
@@ -556,7 +543,7 @@ mod tests {
     #[test]
     fn test_grid_position_clamping() {
         // Test positions outside bounds get clamped
-        let particle = Particle::new(-1.0, 10.0, 3.5);
+        let particle = Particle::new(-1.0, 10.0, 3.2);
         let grid_pos = particle.grid_position();
 
         assert_eq!(grid_pos.x, 0); // Clamped from -1
@@ -598,5 +585,53 @@ mod tests {
             final_speed < initial_speed,
             "Velocity should decay over time"
         );
+    }
+
+    /// Count LEDs that change between consecutive frames over `frames` steps.
+    fn changed_pixels(sim: &mut FluidSimulation, gravity: &Vector3D, frames: usize) -> usize {
+        let occupied = |sim: &FluidSimulation| {
+            let mut cells = [false; 512];
+            for p in sim.active_pixels() {
+                let pos = p.position;
+                cells[pos.x as usize + pos.y as usize * 8 + pos.z as usize * 64] = true;
+            }
+            cells
+        };
+        let mut prev = occupied(sim);
+        let mut changed = 0;
+        for _ in 0..frames {
+            sim.step(gravity);
+            let cur = occupied(sim);
+            changed += prev.iter().zip(cur.iter()).filter(|(a, b)| a != b).count();
+            prev = cur;
+        }
+        changed
+    }
+
+    #[test]
+    fn test_particle_on_floor_comes_to_rest() {
+        let mut sim = FluidSimulation::new(test_config());
+        sim.particles.push(Particle::new(3.0, 3.0, 3.0));
+        let gravity = Vector3D::new(0.0, 1.0, 0.0);
+        for _ in 0..200 {
+            sim.step(&gravity);
+        }
+        assert_eq!(sim.particles[0].grid_position().y, 7);
+        assert!(sim.particles[0].speed() < 0.01);
+    }
+
+    #[test]
+    fn test_full_cube_settles_without_flicker() {
+        let mut config = test_config();
+        config.num_particles = 256;
+        let mut sim = FluidSimulation::new(config);
+        sim.populate(256);
+        // Tilted gravity so the pile has to flow before it settles
+        let gravity = Vector3D::new(0.3, 1.0, 0.2);
+        for _ in 0..600 {
+            sim.step(&gravity);
+        }
+        let changed = changed_pixels(&mut sim, &gravity, 100);
+        assert_eq!(changed, 0, "LEDs still changing after settling");
     }
 }

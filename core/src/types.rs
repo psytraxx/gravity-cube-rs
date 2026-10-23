@@ -97,7 +97,7 @@ impl Pixel {
 /// ```rust
 /// use gravity_cube_core::Particle;
 ///
-/// let particle = Particle::new(3.5, 4.2, 1.0);
+/// let particle = Particle::new(3.2, 4.2, 1.0);
 /// assert!(particle.speed() < 0.001); // Initially at rest
 ///
 /// let grid_pos = particle.grid_position();
@@ -132,12 +132,13 @@ impl Particle {
 
     /// Convert continuous position to discrete grid position for display.
     ///
-    /// Clamps coordinates to the valid range (0-7) and truncates to integers.
+    /// Rounds to the nearest cell and clamps to the valid range (0-7). Rounding keeps a
+    /// particle resting on a wall (exactly 0.0 or 7.0) in the same cell when it jitters.
     pub fn grid_position(&self) -> Position {
         Position::new(
-            self.position.x.clamp(0.0, 7.0) as u8,
-            self.position.y.clamp(0.0, 7.0) as u8,
-            self.position.z.clamp(0.0, 7.0) as u8,
+            (self.position.x + 0.5).clamp(0.0, 7.0) as u8,
+            (self.position.y + 0.5).clamp(0.0, 7.0) as u8,
+            (self.position.z + 0.5).clamp(0.0, 7.0) as u8,
         )
     }
 }
