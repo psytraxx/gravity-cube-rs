@@ -24,7 +24,7 @@ use micromath::F32Ext;
 extern crate alloc;
 
 use esp_hal_smartled::{RmtSmartLeds, WS2812_TIMING, buffer_size, color_order};
-use gravity_cube_core::{Config, Simulation, SimulationEffect, Vector3D, Vector3DExt};
+use gravity_cube_core::{Color, Config, Simulation, SimulationEffect, Vector3D, Vector3DExt};
 use smart_leds::RGB8;
 
 mod adapters;
@@ -115,19 +115,21 @@ async fn main(_spawner: Spawner) -> ! {
     // Initialize RMT for WS2812 LEDs
     info!("  • Setting up RMT for WS2812 LEDs...");
     let rmt_freq = Rate::from_mhz(80);
-    let rmt = Rmt::new(peripherals.RMT, rmt_freq)
-        .expect("Failed to create RMT")
-        .into_async();
+    let rmt = Rmt::new(peripherals.RMT, rmt_freq).expect("Failed to create RMT");
 
-    // Create RMT channel for WS2812 on GPIO 16
-    // Buffer size for 384 LEDs
-    let led_driver = RmtSmartLeds::<{ buffer_size::<RGB8>(384) }, _, RGB8, color_order::Grb>::new(
-        WS2812_TIMING,
-        rmt.channel0,
-        peripherals.GPIO16,
-        rmt_freq,
-    )
-    .expect("Failed to create LED driver");
+    // Create RMT channel for WS2812 on GPIO 16, buffer for 384 LEDs.
+    // Blocking mode refills the RMT RAM in a tight loop; in async mode the refill waits for
+    // the executor and late refills corrupt the stream (visible as LED flicker). Four memory
+    // blocks (all TX RAM on the S3) give 8 LEDs of slack instead of 2.
+    let led_driver =
+        RmtSmartLeds::<{ buffer_size::<RGB8>(384) }, _, RGB8, color_order::Grb>::new_with_memsize(
+            WS2812_TIMING,
+            rmt.channel0,
+            peripherals.GPIO16,
+            4,
+            rmt_freq,
+        )
+        .expect("Failed to create LED driver");
 
     let mut display = Ws2812Display::new(led_driver, 384);
     info!("  ✓ WS2812 LED driver initialized (384 LEDs on GPIO 16)");
@@ -141,7 +143,12 @@ async fn main(_spawner: Spawner) -> ! {
     // ========================================
     info!("Initializing physics simulation...");
 
-    let sim_config = Config::default();
+    // White at 50% brightness: equal channels look the same on every panel and draw
+    // less current than the default cyan
+    let sim_config = Config {
+        color: Color::new(128, 128, 128),
+        ..Config::default()
+    };
 
     let mut simulation = Simulation::new(sim_config);
     simulation.populate(sim_config.num_particles);
@@ -182,7 +189,7 @@ async fn main(_spawner: Spawner) -> ! {
                 }
             }
         } else {
-            // No IMU available, use default gravity
+            // No IMU available, use default gravity (towards z == 0, physically the bottom)
             Vector3D::new(0.0, 0.0, -1.0)
         };
 

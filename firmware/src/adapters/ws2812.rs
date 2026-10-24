@@ -1,28 +1,31 @@
 use super::PanelMapper;
 use gravity_cube_core::{Color, Position};
-use smart_leds::SmartLedsWriteAsync;
+use smart_leds::SmartLedsWrite;
 
 /// WS2812 LED Display adapter using RMT (ESP32's remote control peripheral)
 pub struct Ws2812Display<RMT, C = smart_leds::RGB<u8>>
 where
-    C: From<(u8, u8, u8)> + Default + Copy,
+    C: From<(u8, u8, u8)> + Default + Copy + PartialEq,
 {
     driver: RMT,
     panel_mapper: PanelMapper,
     buffer: [C; 384], // 6 panels * 64 LEDs
+    /// Last frame sent to the LEDs; `None` until the first refresh.
+    sent: Option<[C; 384]>,
     max_leds: usize,
 }
 
 impl<RMT, C> Ws2812Display<RMT, C>
 where
-    RMT: SmartLedsWriteAsync<Color = C>,
-    C: From<(u8, u8, u8)> + Default + Copy,
+    RMT: SmartLedsWrite<Color = C>,
+    C: From<(u8, u8, u8)> + Default + Copy + PartialEq,
 {
     pub fn new(driver: RMT, max_leds: usize) -> Self {
         Self {
             driver,
             panel_mapper: PanelMapper::new(8),
             buffer: [C::default(); 384],
+            sent: None,
             max_leds,
         }
     }
@@ -36,8 +39,8 @@ where
 
 impl<RMT, C> Ws2812Display<RMT, C>
 where
-    RMT: SmartLedsWriteAsync<Color = C>,
-    C: From<(u8, u8, u8)> + Default + Copy,
+    RMT: SmartLedsWrite<Color = C>,
+    C: From<(u8, u8, u8)> + Default + Copy + PartialEq,
 {
     /// Clear the frame buffer. Nothing is sent to the LEDs until `refresh`, so the
     /// cube never shows a blank frame between updates.
@@ -57,11 +60,15 @@ where
         Ok(())
     }
 
-    /// Refresh/update the display to show changes (async version for firmware)
+    /// Send the frame to the LEDs. Unchanged frames are skipped, so a settled cube keeps
+    /// the data line quiet instead of re-sending the same picture every cycle.
     pub async fn refresh(&mut self) -> Result<(), RMT::Error> {
+        if self.sent == Some(self.buffer) {
+            return Ok(());
+        }
         self.driver
-            .write(self.buffer[..self.max_leds].iter().cloned())
-            .await?;
+            .write(self.buffer[..self.max_leds].iter().cloned())?;
+        self.sent = Some(self.buffer);
         Ok(())
     }
 }

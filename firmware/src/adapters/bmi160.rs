@@ -7,6 +7,14 @@ use gravity_cube_core::{Vector3D, Vector3DExt};
 /// LSB/g = 32768 / 2 = 16384
 const ACCEL_SCALE: f32 = 1.0 / 16384.0;
 
+/// Sensor-to-cube axis mapping: cube axis `i` = `AXIS_MAP[i].1 * sensor[AXIS_MAP[i].0]`.
+///
+/// The board is mounted flat with its Z axis pointing up, so at rest it reads +1 g on Z.
+/// On the built cube that has to pull towards cube -Z (`z == 0`), the face that is
+/// physically at the bottom. X is flipped with it so the mapping stays a rotation, not a
+/// mirror. If tilting moves the fluid the wrong way on an axis, flip that axis' sign here.
+const AXIS_MAP: [(usize, f32); 3] = [(0, -1.0), (1, 1.0), (2, -1.0)];
+
 #[derive(Debug)]
 pub enum Bmi160Error<E> {
     Sensor(bmi160::Error<E>),
@@ -15,11 +23,6 @@ pub enum Bmi160Error<E> {
 /// BMI160 IMU driver wrapper using the bmi160 crate
 pub struct Bmi160Adapter<SPI> {
     sensor: Bmi160<bmi160::interface::SpiInterface<SPI>>,
-    /// Sensor orientation mapping (swap axes based on physical mounting)
-    /// Original C code: unit_vector.x = sensor_data.z / magnitude
-    ///                  unit_vector.y = sensor_data.y / magnitude
-    ///                  unit_vector.z = sensor_data.x / magnitude
-    swap_axes: bool,
 }
 
 impl<SPI, E> Bmi160Adapter<SPI>
@@ -47,12 +50,7 @@ where
         let power_mode = sensor.power_mode().map_err(Bmi160Error::Sensor)?;
         log::info!("BMI160 power mode: accel={:?}", power_mode.accel);
 
-        let adapter = Self {
-            sensor,
-            swap_axes: true, // Match C code orientation
-        };
-
-        Ok(adapter)
+        Ok(Self { sensor })
     }
 
     /// Read acceleration vector in g-force units.
@@ -77,23 +75,15 @@ where
             (0, 0, 0)
         };
 
-        // Convert raw i16 to g-force
-        let mut accel = Vector3D::new(
+        // Convert raw i16 to g-force and map sensor axes onto cube axes
+        let raw = [
             raw_x as f32 * ACCEL_SCALE,
             raw_y as f32 * ACCEL_SCALE,
             raw_z as f32 * ACCEL_SCALE,
-        );
+        ];
+        let axis = |i: usize| AXIS_MAP[i].1 * raw[AXIS_MAP[i].0];
 
-        // Apply axis swapping to match physical orientation
-        // Original C code mapping:
-        // unit_vector.x = sensor_data.z / magnitude
-        // unit_vector.y = sensor_data.y / magnitude
-        // unit_vector.z = sensor_data.x / magnitude
-        if self.swap_axes {
-            accel = Vector3D::new(accel.z, accel.y, accel.x);
-        }
-
-        Ok(accel)
+        Ok(Vector3D::new(axis(0), axis(1), axis(2)))
     }
 
     /// Read gravity direction as a normalized unit vector.
