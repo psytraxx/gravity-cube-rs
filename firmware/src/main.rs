@@ -23,7 +23,7 @@ use micromath::F32Ext;
 
 extern crate alloc;
 
-use esp_hal_smartled::{RmtSmartLeds, WS2812_TIMING, buffer_size, color_order};
+use esp_hal_smartled::{RmtSmartLeds, buffer_size, color_order};
 use gravity_cube_core::{Color, Config, Simulation, SimulationEffect, Vector3D, Vector3DExt};
 use smart_leds::RGB8;
 
@@ -143,10 +143,10 @@ async fn main(_spawner: Spawner) -> ! {
     // ========================================
     info!("Initializing physics simulation...");
 
-    // White at 50% brightness: equal channels look the same on every panel and draw
-    // less current than the default cyan
+    // Dim green only: a single channel draws a fraction of the current of white, and
+    // the eye is most sensitive to green, so it stays visible at a low level
     let sim_config = Config {
-        color: Color::new(128, 128, 128),
+        color: Color::new(0, 60, 0),
         ..Config::default()
     };
 
