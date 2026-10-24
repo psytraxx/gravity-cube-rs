@@ -123,7 +123,7 @@ async fn main(_spawner: Spawner) -> ! {
     // blocks (all TX RAM on the S3) give 8 LEDs of slack instead of 2.
     let led_driver =
         RmtSmartLeds::<{ buffer_size::<RGB8>(384) }, _, RGB8, color_order::Grb>::new_with_memsize(
-            WS2812_TIMING,
+            esp_hal_smartled::WS2812B_TIMING,
             rmt.channel0,
             peripherals.GPIO16,
             4,
