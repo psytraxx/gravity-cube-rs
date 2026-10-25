@@ -59,7 +59,7 @@ impl PanelMapper {
             // 5 · Bottom
             PanelConfig {
                 panel_num: 5,
-                orientation: 0,
+                orientation: 90,
                 direction: Direction::Down,
                 inverted_x: false,
                 inverted_y: true,
