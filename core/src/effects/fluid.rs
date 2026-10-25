@@ -24,7 +24,7 @@ const GRID_CELL_SIZE: f32 = 1.0;
 
 // Fluid physics constants
 /// Gravity acceleration multiplier.
-const GRAVITY: f32 = 0.15;
+const GRAVITY: f32 = 0.45;
 
 /// Acceleration responsiveness scale factor.
 ///
@@ -37,37 +37,24 @@ const ACCELERATION_SCALE: f32 = 0.3;
 const MAX_VELOCITY: f32 = 0.9;
 
 /// Velocity smoothing/inertia factor (0.0-1.0).
-const VELOCITY_SMOOTHING: f32 = 0.9;
+const VELOCITY_SMOOTHING: f32 = 0.85;
 
 /// Velocity decay per step - friction (0.0-1.0).
-const VELOCITY_DECAY: f32 = 0.95;
+const VELOCITY_DECAY: f32 = 0.98;
 
 /// Fraction of the overlap between two particles corrected per solver pass (0.0-1.0).
 const COLLISION_STIFFNESS: f32 = 0.8;
 
 /// Collision solver passes per step. More passes keep a deep pile from compressing.
-const SOLVER_ITERATIONS: usize = 3;
+const SOLVER_ITERATIONS: usize = 4;
 
 /// How far (in cells) a particle must move from its displayed cell's centre before its LED
 /// moves. Values above 0.5 stop particles sitting on a cell boundary from flickering.
 const DISPLAY_HYSTERESIS: f32 = 0.65;
 
-/// Neighbor offsets for spatial grid lookups (27 neighbors including self).
-const NEIGHBOR_OFFSETS: [(i32, i32, i32); 27] = [
-    (-1, -1, -1),
-    (0, -1, -1),
-    (1, -1, -1),
-    (-1, 0, -1),
-    (0, 0, -1),
-    (1, 0, -1),
-    (-1, 1, -1),
-    (0, 1, -1),
-    (1, 1, -1),
-    (-1, -1, 0),
-    (0, -1, 0),
-    (1, -1, 0),
-    (-1, 0, 0),
-    (0, 0, 0),
+/// The 13 neighbouring cells "after" a cell (in z, then y, then x order). Checking a cell
+/// against itself and these visits every pair of adjacent cells exactly once.
+const FORWARD_NEIGHBORS: [(i32, i32, i32); 13] = [
     (1, 0, 0),
     (-1, 1, 0),
     (0, 1, 0),
@@ -133,31 +120,6 @@ impl SpatialGrid {
         let idx = self.cell_index(pos.x, pos.y, pos.z);
         self.next[particle_index as usize] = self.head[idx];
         self.head[idx] = particle_index;
-    }
-
-    /// Iterate over all neighboring cells (including the cell itself).
-    /// Returns an iterator of cell indices to check for collisions.
-    fn neighbor_cells(&self, x: f32, y: f32, z: f32) -> impl Iterator<Item = usize> + '_ {
-        let cx = (x / GRID_CELL_SIZE).clamp(0.0, (self.size - 1) as f32) as i32;
-        let cy = (y / GRID_CELL_SIZE).clamp(0.0, (self.size - 1) as f32) as i32;
-        let cz = (z / GRID_CELL_SIZE).clamp(0.0, (self.size - 1) as f32) as i32;
-        let size = self.size as i32;
-
-        // Generate all 27 neighbor offsets (-1, 0, 1) for each axis
-        NEIGHBOR_OFFSETS.iter().filter_map(move |&(dx, dy, dz)| {
-            let nx = cx + dx;
-            let ny = cy + dy;
-            let nz = cz + dz;
-            if nx >= 0 && nx < size && ny >= 0 && ny < size && nz >= 0 && nz < size {
-                Some(
-                    (nx as usize)
-                        + (ny as usize) * (size as usize)
-                        + (nz as usize) * (size as usize) * (size as usize),
-                )
-            } else {
-                None
-            }
-        })
     }
 }
 
@@ -295,36 +257,58 @@ impl SimulationEffect for FluidSimulation {
 
 impl FluidSimulation {
     /// One solver pass: separate every overlapping pair in proportion to its overlap.
+    ///
+    /// Walks the grid cell by cell and pairs each cell only with itself and its forward
+    /// neighbours, so every pair is tested once and neighbour lookups happen per cell, not
+    /// per particle. This runs several times per frame and dominates the frame time.
     fn resolve_collisions(&mut self) {
         self.grid.clear(self.particles.len());
         for (i, particle) in self.particles.iter().enumerate() {
             self.grid.insert(i as u16, &particle.position);
         }
 
-        for i in 0..self.particles.len() {
-            let pos_i = self.particles[i].position;
+        let grid = &self.grid;
+        let particles = &mut self.particles;
+        let size = grid.size as i32;
+        let mut neighbors = [0usize; FORWARD_NEIGHBORS.len()];
 
-            // Only check particles in neighboring cells
-            for cell_idx in self.grid.neighbor_cells(pos_i.x, pos_i.y, pos_i.z) {
-                let mut neighbor_idx = self.grid.head[cell_idx];
-                while neighbor_idx != u16::MAX {
-                    let j = neighbor_idx as usize;
-                    neighbor_idx = self.grid.next[j];
-
-                    // Only check pairs once (j > i)
-                    if j <= i {
+        for cz in 0..size {
+            for cy in 0..size {
+                for cx in 0..size {
+                    let cell = (cx + cy * size + cz * size * size) as usize;
+                    if grid.head[cell] == u16::MAX {
                         continue;
                     }
 
-                    let delta = self.particles[j].position - self.particles[i].position;
-                    let dist_squared = delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
+                    let mut count = 0;
+                    for &(dx, dy, dz) in &FORWARD_NEIGHBORS {
+                        let (nx, ny, nz) = (cx + dx, cy + dy, cz + dz);
+                        if (0..size).contains(&nx) && (0..size).contains(&ny) && nz < size {
+                            let neighbor = (nx + ny * size + nz * size * size) as usize;
+                            if grid.head[neighbor] != u16::MAX {
+                                neighbors[count] = neighbor;
+                                count += 1;
+                            }
+                        }
+                    }
 
-                    if dist_squared < COLLISION_THRESHOLD && dist_squared > MIN_DISTANCE_SQUARED {
-                        let dist = dist_squared.sqrt();
-                        let push = (COLLISION_THRESHOLD - dist) * 0.5 * COLLISION_STIFFNESS;
-                        let offset = delta * (push / dist);
-                        self.particles[i].position -= offset;
-                        self.particles[j].position += offset;
+                    let mut a = grid.head[cell];
+                    while a != u16::MAX {
+                        let i = a as usize;
+                        // Particles later in this cell's list, then every particle next door
+                        let mut b = grid.next[i];
+                        while b != u16::MAX {
+                            separate(particles, i, b as usize);
+                            b = grid.next[b as usize];
+                        }
+                        for &neighbor in &neighbors[..count] {
+                            let mut b = grid.head[neighbor];
+                            while b != u16::MAX {
+                                separate(particles, i, b as usize);
+                                b = grid.next[b as usize];
+                            }
+                        }
+                        a = grid.next[i];
                     }
                 }
             }
@@ -349,6 +333,25 @@ impl FluidSimulation {
                 cell.z = target.z;
             }
         }
+    }
+}
+
+/// Push particles `i` and `j` apart if they overlap.
+///
+/// Uses `invsqrt` (multiplies only) instead of `sqrt` and a division: the ESP32-S3 FPU has
+/// no hardware divide or square root, so those would be done in software.
+#[inline(always)]
+fn separate(particles: &mut [Particle], i: usize, j: usize) {
+    let delta = particles[j].position - particles[i].position;
+    let dist_squared = delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
+
+    if dist_squared < COLLISION_THRESHOLD && dist_squared > MIN_DISTANCE_SQUARED {
+        let inv_dist = micromath::F32Ext::invsqrt(dist_squared);
+        let dist = dist_squared * inv_dist;
+        let push = (COLLISION_THRESHOLD - dist) * 0.5 * COLLISION_STIFFNESS;
+        let offset = delta * (push * inv_dist);
+        particles[i].position -= offset;
+        particles[j].position += offset;
     }
 }
 

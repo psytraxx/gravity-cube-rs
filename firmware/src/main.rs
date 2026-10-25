@@ -7,7 +7,7 @@
 )]
 
 use embassy_executor::Spawner;
-use embassy_time::{Duration, Timer};
+use embassy_time::{Duration, Instant, Timer};
 use embedded_hal::spi::{Operation, SpiDevice};
 use esp_backtrace as _;
 use esp_hal::clock::CpuClock;
@@ -24,6 +24,7 @@ use micromath::F32Ext;
 extern crate alloc;
 
 use esp_hal_smartled::{RmtSmartLeds, buffer_size, color_order};
+use gravity_cube_core::physics_utils::MotionFilter;
 use gravity_cube_core::{Color, Config, Simulation, SimulationEffect, Vector3D, Vector3DExt};
 use smart_leds::RGB8;
 
@@ -177,6 +178,8 @@ async fn main(_spawner: Spawner) -> ! {
     // Main Loop
     // ========================================
     let mut loop_count = 0u32;
+    // Track gravity slowly and triple anything faster, so shaking the cube sloshes the fluid
+    let mut motion = MotionFilter::new(0.05, 3.0);
 
     loop {
         // Read acceleration from IMU (includes magnitude, not just direction)
@@ -194,8 +197,10 @@ async fn main(_spawner: Spawner) -> ! {
             Vector3D::new(0.0, 0.0, -1.0)
         };
 
-        // Run physics simulation step with actual acceleration
-        simulation.step(&acceleration);
+        // Run physics simulation step with gravity plus amplified motion
+        let frame_start = Instant::now();
+        simulation.step(&motion.apply(acceleration));
+        let physics_time = frame_start.elapsed();
 
         // Clear display
         if let Err(e) = display.clear().await {
@@ -214,6 +219,8 @@ async fn main(_spawner: Spawner) -> ! {
             warn!("Display refresh failed: {:?}", e);
         }
 
+        let frame_time = frame_start.elapsed();
+
         // Log status periodically (every 100 loops)
         loop_count = loop_count.wrapping_add(1);
         if loop_count.is_multiple_of(100) {
@@ -223,8 +230,15 @@ async fn main(_spawner: Spawner) -> ! {
                 + acceleration.z * acceleration.z)
                 .sqrt();
             info!(
-                "Loop {}: {} particles, accel: ({:.2}, {:.2}, {:.2}) |{:.2}|g",
-                loop_count, active_count, acceleration.x, acceleration.y, acceleration.z, magnitude
+                "Loop {}: {} particles, accel: ({:.2}, {:.2}, {:.2}) |{:.2}|g, physics {}us, frame {}us",
+                loop_count,
+                active_count,
+                acceleration.x,
+                acceleration.y,
+                acceleration.z,
+                magnitude,
+                physics_time.as_micros(),
+                frame_time.as_micros()
             );
         }
 

@@ -3,9 +3,9 @@ use embedded_hal::delay::DelayNs;
 use embedded_hal::spi::SpiDevice;
 use gravity_cube_core::{Vector3D, Vector3DExt};
 
-/// BMI160 default accelerometer scale: ±2g with 16-bit resolution
-/// LSB/g = 32768 / 2 = 16384
-const ACCEL_SCALE: f32 = 1.0 / 16384.0;
+/// Accelerometer scale at ±4g with 16-bit resolution: LSB/g = 32768 / 4 = 8192.
+/// ±4g leaves headroom so shaking the cube does not clip.
+const ACCEL_SCALE: f32 = 1.0 / 8192.0;
 
 /// Sensor-to-cube axis mapping: cube axis `i` = `AXIS_MAP[i].1 * sensor[AXIS_MAP[i].0]`.
 ///
@@ -41,9 +41,9 @@ where
         // The accelerometer needs a few ms to leave suspend; reading earlier returns zeros.
         delay.delay_ms(80);
 
-        // Set accelerometer range to ±2g (matches our ACCEL_SCALE constant)
+        // Set accelerometer range to ±4g (matches our ACCEL_SCALE constant)
         sensor
-            .set_accel_range(bmi160::AccelerometerRange::G2)
+            .set_accel_range(bmi160::AccelerometerRange::G4)
             .map_err(Bmi160Error::Sensor)?;
         delay.delay_ms(10);
 
