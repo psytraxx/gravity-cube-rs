@@ -24,7 +24,7 @@ const GRID_CELL_SIZE: f32 = 1.0;
 
 // Fluid physics constants
 /// Gravity acceleration multiplier.
-const GRAVITY: f32 = 0.08;
+const GRAVITY: f32 = 0.15;
 
 /// Acceleration responsiveness scale factor.
 ///
@@ -34,7 +34,7 @@ const GRAVITY: f32 = 0.08;
 const ACCELERATION_SCALE: f32 = 0.3;
 
 /// Maximum velocity per axis.
-const MAX_VELOCITY: f32 = 0.6;
+const MAX_VELOCITY: f32 = 0.9;
 
 /// Velocity smoothing/inertia factor (0.0-1.0).
 const VELOCITY_SMOOTHING: f32 = 0.9;

@@ -180,8 +180,8 @@ The simulation uses a continuous floating-point particle system with fluid-like 
 **Physics Algorithm (per frame):**
 1. **Velocity Update**: `v = v * smoothing + (gravity * strength)`
    - Velocity smoothing: 0.9 (creates smooth acceleration)
-   - Gravity strength: 0.08 (times 0.3 acceleration scale)
-2. **Velocity Clamping**: Limit to ±0.6 max velocity
+   - Gravity strength: 0.15 (times 0.3 acceleration scale)
+2. **Velocity Clamping**: Limit to ±0.9 max velocity
 3. **Predict Position**: `position += velocity`, clamped to the cube walls
 4. **Particle Collision** (spatial grid, 3 solver passes):
    - Detect particles within distance < 1.0

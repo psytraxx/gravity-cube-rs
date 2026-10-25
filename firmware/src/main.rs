@@ -147,6 +147,7 @@ async fn main(_spawner: Spawner) -> ! {
     // the eye is most sensitive to green, so it stays visible at a low level
     let sim_config = Config {
         color: Color::new(0, 60, 0),
+        delay_ms: 0,
         ..Config::default()
     };
 

@@ -9,11 +9,11 @@ const ACCEL_SCALE: f32 = 1.0 / 16384.0;
 
 /// Sensor-to-cube axis mapping: cube axis `i` = `AXIS_MAP[i].1 * sensor[AXIS_MAP[i].0]`.
 ///
-/// The board is mounted flat with its Z axis pointing up, so at rest it reads +1 g on Z.
-/// On the built cube that has to pull towards cube -Z (`z == 0`), the face that is
-/// physically at the bottom. X is flipped with it so the mapping stays a rotation, not a
-/// mirror. If tilting moves the fluid the wrong way on an axis, flip that axis' sign here.
-const AXIS_MAP: [(usize, f32); 3] = [(0, -1.0), (1, 1.0), (2, -1.0)];
+/// The board is mounted flat on the top face with its Z axis pointing up, so at rest it
+/// reads +1 g on Z, which has to pull towards cube -Z (`z == 0`), the bottom face. With
+/// panel 0 (`x == 0`) on the floor the sensor reads -1 g on X, so X maps straight through.
+/// If tilting moves the fluid the wrong way on an axis, flip that axis' sign here.
+const AXIS_MAP: [(usize, f32); 3] = [(0, 1.0), (1, 1.0), (2, -1.0)];
 
 #[derive(Debug)]
 pub enum Bmi160Error<E> {
