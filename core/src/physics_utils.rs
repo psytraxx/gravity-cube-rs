@@ -137,6 +137,55 @@ pub fn distance_squared(p1: &Vector3D, p2: &Vector3D) -> f32 {
     dx * dx + dy * dy + dz * dz
 }
 
+/// Splits an accelerometer reading into slow gravity and fast motion, and amplifies the
+/// motion so that shaking or jerking the device visibly sloshes the fluid.
+///
+/// Gravity is tracked with a low-pass filter. Whatever the reading adds on top of it is
+/// the device's own acceleration (already pointing the way the fluid should lag), and is
+/// scaled by `gain` before being added back.
+///
+/// # Example
+///
+/// ```
+/// use gravity_cube_core::{Vector3D, Vector3DExt};
+/// use gravity_cube_core::physics_utils::MotionFilter;
+///
+/// let mut filter = MotionFilter::new(0.05, 3.0);
+/// let rest = Vector3D::new(0.0, 0.0, -1.0);
+/// assert_eq!(filter.apply(rest), rest); // A steady reading passes through unchanged
+///
+/// let jolt = filter.apply(Vector3D::new(0.5, 0.0, -1.0));
+/// assert!(jolt.x > 0.5); // A sudden change is amplified
+/// ```
+#[derive(Debug, Clone, Copy)]
+pub struct MotionFilter {
+    gravity: Option<Vector3D>,
+    smoothing: f32,
+    gain: f32,
+}
+
+impl MotionFilter {
+    /// `smoothing` is the fraction of each reading folded into the gravity estimate
+    /// (smaller = slower), `gain` the multiplier for motion on top of gravity.
+    pub const fn new(smoothing: f32, gain: f32) -> Self {
+        Self {
+            gravity: None,
+            smoothing,
+            gain,
+        }
+    }
+
+    /// Feed one reading and return gravity plus amplified motion.
+    pub fn apply(&mut self, reading: Vector3D) -> Vector3D {
+        let gravity = match self.gravity {
+            Some(g) => g + (reading - g) * self.smoothing,
+            None => reading,
+        };
+        self.gravity = Some(gravity);
+        gravity + (reading - gravity) * self.gain
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -212,5 +261,22 @@ mod tests {
         let dist_sq = distance_squared(&p1, &p2);
 
         assert_eq!(dist_sq, 25.0);
+    }
+
+    #[test]
+    fn motion_filter_settles_back_to_gravity() {
+        let mut filter = MotionFilter::new(0.05, 3.0);
+        filter.apply(Vector3D::new(0.0, 0.0, -1.0));
+
+        // Tilted and held still: the amplified overshoot decays to the new reading
+        let tilted = Vector3D::new(1.0, 0.0, 0.0);
+        let first = filter.apply(tilted);
+        assert!(first.x > 1.0);
+        let mut out = first;
+        for _ in 0..300 {
+            out = filter.apply(tilted);
+        }
+        assert!((out.x - 1.0).abs() < 0.01);
+        assert!(out.z.abs() < 0.01);
     }
 }

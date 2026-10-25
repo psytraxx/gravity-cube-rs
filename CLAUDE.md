@@ -102,6 +102,7 @@ Core business logic with no hardware dependencies:
   - `apply_boundary_3d()`: 3D boundary collision helper
   - `clamp_speed()`: Velocity magnitude limiting
   - `distance_squared()`: Fast distance calculation for collision detection
+  - `MotionFilter`: Splits IMU readings into slow gravity and amplified motion, so shaking sloshes the fluid
 
 Key fluid simulation algorithm:
 - Continuous floating-point particle positions (not grid-locked)
@@ -179,14 +180,14 @@ The simulation uses a continuous floating-point particle system with fluid-like 
 
 **Physics Algorithm (per frame):**
 1. **Velocity Update**: `v = v * smoothing + (gravity * strength)`
-   - Velocity smoothing: 0.9 (creates smooth acceleration)
-   - Gravity strength: 0.08 (times 0.3 acceleration scale)
-2. **Velocity Clamping**: Limit to ±0.6 max velocity
+   - Velocity smoothing: 0.85 (creates smooth acceleration)
+   - Gravity strength: 0.45 (times 0.3 acceleration scale)
+2. **Velocity Clamping**: Limit to ±0.9 max velocity
 3. **Predict Position**: `position += velocity`, clamped to the cube walls
-4. **Particle Collision** (spatial grid, 3 solver passes):
+4. **Particle Collision** (spatial grid, 4 solver passes):
    - Detect particles within distance < 1.0
    - Push each overlapping pair apart by 0.8 × overlap per pass, clamped to the walls
-5. **Velocity from Displacement**: `v = (position - previous) * 0.95`
+5. **Velocity from Displacement**: `v = (position - previous) * 0.98`
    - A particle blocked by a wall or its neighbours ends up with zero velocity, so piles come to rest
 
 **Display Conversion:**
@@ -246,7 +247,9 @@ let sim_config = Config {
 
 ### Optimization
 - Dev builds: opt-level = "s" (Rust debug is too slow for embedded)
-- Release builds: LTO = 'fat', codegen-units = 1, opt-level = 's'
+- Release builds: LTO = 'fat', codegen-units = 1, opt-level = 's'; the core crate uses opt-level = 3
+  because the physics dominates frame time (the ESP32-S3 FPU has no hardware divide or sqrt, so the
+  collision solver avoids both)
 
 ### Linker
 Custom linker error handler in `build.rs` provides helpful messages for common issues (missing defmt, esp-rtos, etc.).

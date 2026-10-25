@@ -28,3 +28,7 @@ incremental = false
 lto = 'fat'
 opt-level = 's'
 overflow-checks = false
+
+# The physics runs every frame and dominates frame time: optimize it for speed, not size
+[profile.release.package.gravity-cube-core]
+opt-level = 3
