@@ -214,11 +214,11 @@ The simulation uses a continuous floating-point particle system with fluid-like 
 
 **Desktop**: Edit in `desktop/src/main.rs`
 
-Both use the same Config struct with fluid physics parameters:
+Both use the same Config struct; each effect gets its own (`EffectSwitcher::with_configs(fluid, boids)`), so particle count and colour are per effect:
 ```rust
 let sim_config = Config {
     cube_size: 8,
-    num_particles: 256,          // 256 (desktop) or 128 (firmware)
+    num: 256,                    // Particles: 256 for the fluid, 32 for the boids config
     velocity: 2.0,               // Legacy field (unused by fluid sim)
     delay_ms: 35,                // Frame delay (firmware only)
     color: Color::new(100, 180, 255),  // Cyan for water appearance

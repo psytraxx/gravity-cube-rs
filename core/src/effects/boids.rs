@@ -296,7 +296,7 @@ mod tests {
     fn test_config() -> crate::types::Config {
         crate::types::Config {
             cube_size: 8,
-            num_particles: 10,
+            num: 10,
             delay_ms: 35,
             color: Color::new(255, 200, 100),
         }

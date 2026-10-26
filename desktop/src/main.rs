@@ -20,9 +20,6 @@ use winit::{
 const WINDOW_WIDTH: u32 = 1400;
 const WINDOW_HEIGHT: u32 = 1400;
 
-/// Voxel colour of the boids effect; the fluid uses the config colour.
-const BOIDS_COLOR: Color = Color::new(255, 170, 60);
-
 struct App {
     state: Option<State>,
     window: Option<Arc<Window>>,
@@ -40,13 +37,21 @@ struct State {
 
 impl State {
     async fn new(window: Arc<Window>) -> Self {
-        // Initialize simulation with fluid physics
-        let config = Config::default();
+        // Each effect has its own particle count and colour; a double click switches
+        let fluid_config = Config {
+            num: 256,
+            ..Config::default()
+        };
+        let boids_config = Config {
+            num: 32,
+            color: Color::new(255, 170, 60),
+            ..fluid_config
+        };
 
-        let renderer = Renderer3D::new(window, config.color).await;
+        let renderer = Renderer3D::new(window, fluid_config.color).await;
 
-        let mut simulation = EffectSwitcher::new(config);
-        simulation.populate(config.num_particles);
+        let mut simulation = EffectSwitcher::with_configs(fluid_config, boids_config);
+        simulation.populate(fluid_config.num);
 
         let input_handler = InputHandler::new(WINDOW_WIDTH, WINDOW_HEIGHT);
         let cube_transform = CubeTransform::new();
@@ -65,11 +70,7 @@ impl State {
     /// Switch to the next effect and its colour.
     fn next_effect(&mut self) {
         self.simulation.next_effect();
-        let color = match self.simulation {
-            EffectSwitcher::Fluid(_) => self.simulation.config().color,
-            EffectSwitcher::Boids(_) => BOIDS_COLOR,
-        };
-        self.renderer.set_color(color);
+        self.renderer.set_color(self.simulation.config().color);
         log::info!("Switched to {} effect", self.simulation.name());
     }
 

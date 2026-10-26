@@ -150,7 +150,7 @@ The desktop uses `Config::default()` (see `core/src/types.rs`):
 ```rust
 Config {
     cube_size: 8,
-    num_particles: 256,
+    num: 256,                    // Particles the effect runs with
     delay_ms: 35,                // Firmware frame delay (desktop updates every frame)
     color: Color::DEFAULT,
 }
@@ -234,7 +234,10 @@ espflash flash --monitor target/xtensa-esp32s3-none-elf/release/firmware
 
 ### Configuration
 
-The firmware also uses `Config::default()` in `firmware/src/main.rs` (8×8×8 cube, 256 particles, 35ms frame delay, ~28 FPS). Override fields there if the ESP32 can't keep up, e.g. lower `num_particles`.
+The firmware also uses `Config::default()` in `firmware/src/main.rs` (8×8×8 cube, 256 particles, 35ms frame delay, ~28 FPS). Override fields there if the ESP32 can't keep up, e.g. lower `num`.
+
+Each effect gets its own `Config`, so particle count and colour are set per effect: the
+fluid runs 256 particles and the boids a flock of 32, passed to `EffectSwitcher::with_configs`.
 
 The physics tuning constants (gravity, damping, max velocity, smoothing, decay, collision repulsion/damping) are compile-time constants at the top of `core/src/effects/fluid.rs`.
 

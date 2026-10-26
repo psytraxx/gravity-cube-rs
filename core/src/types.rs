@@ -187,8 +187,8 @@ impl Color {
 pub struct Config {
     /// Cube dimension (typically 8 for an 8x8x8 cube).
     pub cube_size: u8,
-    /// Number of particles to simulate.
-    pub num_particles: usize,
+    /// Number of particles the effect runs with.
+    pub num: usize,
     /// Delay between simulation steps in milliseconds (for firmware timing).
     pub delay_ms: u32,
     /// Default color for particles.
@@ -199,7 +199,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             cube_size: 8,
-            num_particles: 256,
+            num: 256,
             delay_ms: 35,
             color: Color::DEFAULT,
         }

@@ -399,7 +399,7 @@ mod tests {
     fn test_config() -> crate::types::Config {
         crate::types::Config {
             cube_size: 8,
-            num_particles: 4,
+            num: 4,
             delay_ms: 35,
             color: Color::DEFAULT,
         }
@@ -654,7 +654,7 @@ mod tests {
     #[test]
     fn test_full_cube_settles_without_flicker() {
         let mut config = test_config();
-        config.num_particles = 256;
+        config.num = 256;
         let mut sim = FluidSimulation::new(config);
         sim.populate(256);
         // Tilted gravity so the pile has to flow before it settles

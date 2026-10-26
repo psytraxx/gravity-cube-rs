@@ -44,9 +44,6 @@ use adapters::{Bmi160Adapter, FrameBuilder, LED_COUNT, Ws2812Display};
 // This creates a default app-descriptor required by the esp-idf bootloader.
 esp_bootloader_esp_idf::esp_app_desc!();
 
-/// LED colour of the boids effect: dim amber, so a double tap visibly changes the cube.
-const BOIDS_COLOR: Color = Color::new(40, 20, 0);
-
 type LedDriver =
     RmtSmartLeds<'static, { buffer_size::<RGB8>(LED_COUNT) }, Blocking, RGB8, color_order::Grb>;
 
@@ -201,26 +198,32 @@ async fn main(_spawner: Spawner) -> ! {
 
     // Dim green only: a single channel draws a fraction of the current of white, and
     // the eye is most sensitive to green, so it stays visible at a low level
-    let sim_config = Config {
+    let fluid_config = Config {
+        num: 256,
         color: Color::new(0, 60, 0),
         delay_ms: 0,
         ..Config::default()
     };
+    // A few dozen boids read as a flock; dim amber so a double tap visibly changes the cube
+    let boids_config = Config {
+        num: 32,
+        color: Color::new(40, 20, 0),
+        ..fluid_config
+    };
 
-    let mut simulation = EffectSwitcher::new(sim_config);
-    simulation.populate(sim_config.num_particles);
+    let mut simulation = EffectSwitcher::with_configs(fluid_config, boids_config);
+    simulation.populate(fluid_config.num);
 
     info!(
         "  • Cube size: {}x{}x{}",
-        sim_config.cube_size, sim_config.cube_size, sim_config.cube_size
+        fluid_config.cube_size, fluid_config.cube_size, fluid_config.cube_size
     );
-    info!("  • Active particles: {}", sim_config.num_particles);
-    info!("  • Update rate: {}ms", sim_config.delay_ms);
-    info!("  • Double-tap the cube to switch effects");
     info!(
-        "  • LED color: RGB({}, {}, {})",
-        sim_config.color.r, sim_config.color.g, sim_config.color.b
+        "  • Particles: {} fluid, {} boids",
+        fluid_config.num, boids_config.num
     );
+    info!("  • Update rate: {}ms", fluid_config.delay_ms);
+    info!("  • Double-tap the cube to switch effects");
     info!("");
 
     // Wait for sensors to stabilize
@@ -275,10 +278,7 @@ async fn main(_spawner: Spawner) -> ! {
 
         // Build the frame and hand it to core 1. This only waits if core 1 is still sending
         // the frame before last, so physics and LED output overlap
-        let color = match simulation {
-            EffectSwitcher::Fluid(_) => sim_config.color,
-            EffectSwitcher::Boids(_) => BOIDS_COLOR,
-        };
+        let color = simulation.config().color;
         frame.clear();
         for pixel in simulation.active_pixels() {
             frame.set_pixel(pixel.position, color);
@@ -314,6 +314,6 @@ async fn main(_spawner: Spawner) -> ! {
         }
 
         // Delay for next frame
-        Timer::after(Duration::from_millis(sim_config.delay_ms as u64)).await;
+        Timer::after(Duration::from_millis(simulation.config().delay_ms as u64)).await;
     }
 }
