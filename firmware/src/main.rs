@@ -6,18 +6,25 @@
     holding buffers for the duration of a data transfer."
 )]
 
+use core::sync::atomic::{AtomicU32, Ordering};
+
 use embassy_executor::Spawner;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Instant, Timer};
 use embedded_hal::spi::{Operation, SpiDevice};
 use esp_backtrace as _;
+use esp_hal::Blocking;
 use esp_hal::clock::CpuClock;
 use esp_hal::delay::Delay;
 use esp_hal::gpio::{Level, OutputConfig};
 use esp_hal::rmt::Rmt;
 use esp_hal::spi::master::Config as SpiConfig;
 use esp_hal::spi::master::Spi;
+use esp_hal::system::Stack;
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
+use esp_rtos::embassy::Executor;
 use log::{info, warn};
 use micromath::F32Ext;
 
@@ -27,12 +34,40 @@ use esp_hal_smartled::{RmtSmartLeds, buffer_size, color_order};
 use gravity_cube_core::physics_utils::MotionFilter;
 use gravity_cube_core::{Color, Config, Simulation, SimulationEffect, Vector3D, Vector3DExt};
 use smart_leds::RGB8;
+use static_cell::{ConstStaticCell, StaticCell};
 
 mod adapters;
-use adapters::{Bmi160Adapter, Ws2812Display};
+use adapters::ws2812::Frame;
+use adapters::{Bmi160Adapter, FrameBuilder, LED_COUNT, Ws2812Display};
 
 // This creates a default app-descriptor required by the esp-idf bootloader.
 esp_bootloader_esp_idf::esp_app_desc!();
+
+type LedDriver =
+    RmtSmartLeds<'static, { buffer_size::<RGB8>(LED_COUNT) }, Blocking, RGB8, color_order::Grb>;
+
+/// Frames from the physics loop (core 0) to the LED task (core 1). One slot: core 0 computes
+/// the next frame while core 1 sends the current one, then waits if core 1 is still busy.
+static FRAMES: Channel<CriticalSectionRawMutex, Frame<RGB8>, 1> = Channel::new();
+
+/// Duration of the last LED send in microseconds, for the status log.
+static LED_SEND_US: AtomicU32 = AtomicU32::new(0);
+
+/// Sends frames to the LEDs on the second core.
+///
+/// The RMT driver refills its RAM in a blocking loop while sending (about 11.5 ms for 384
+/// LEDs), so giving it its own core keeps that time off the physics loop.
+#[embassy_executor::task]
+async fn led_task(display: &'static mut Ws2812Display<LedDriver>) {
+    loop {
+        let frame = FRAMES.receive().await;
+        let start = Instant::now();
+        if let Err(e) = display.show(&frame) {
+            warn!("Display refresh failed: {:?}", e);
+        }
+        LED_SEND_US.store(start.elapsed().as_micros() as u32, Ordering::Relaxed);
+    }
+}
 
 #[esp_rtos::main]
 async fn main(_spawner: Spawner) -> ! {
@@ -122,18 +157,34 @@ async fn main(_spawner: Spawner) -> ! {
     // Blocking mode refills the RMT RAM in a tight loop; in async mode the refill waits for
     // the executor and late refills corrupt the stream (visible as LED flicker). Four memory
     // blocks (all TX RAM on the S3) give 8 LEDs of slack instead of 2.
-    let led_driver =
-        RmtSmartLeds::<{ buffer_size::<RGB8>(384) }, _, RGB8, color_order::Grb>::new_with_memsize(
-            esp_hal_smartled::WS2812B_TIMING,
-            rmt.channel0,
-            peripherals.GPIO16,
-            4,
-            rmt_freq,
-        )
-        .expect("Failed to create LED driver");
+    let led_driver = LedDriver::new_with_memsize(
+        esp_hal_smartled::WS2812B_TIMING,
+        rmt.channel0,
+        peripherals.GPIO16,
+        4,
+        rmt_freq,
+    )
+    .expect("Failed to create LED driver");
 
-    let mut display = Ws2812Display::new(led_driver, 384);
+    // The driver holds a ~36 KB pulse buffer, so it lives in a static rather than on a stack
+    static DISPLAY: StaticCell<Ws2812Display<LedDriver>> = StaticCell::new();
+    let display = DISPLAY.init(Ws2812Display::new(led_driver));
     info!("  ✓ WS2812 LED driver initialized (384 LEDs on GPIO 16)");
+
+    // Hand the LEDs to the second core, which sends frames while this core runs physics
+    static APP_CORE_STACK: ConstStaticCell<Stack<8192>> = ConstStaticCell::new(Stack::new());
+    esp_rtos::start_second_core(
+        peripherals.CPU_CTRL,
+        peripherals.FROM_CPU_INTR1,
+        APP_CORE_STACK.take(),
+        move || {
+            static EXECUTOR: StaticCell<Executor> = StaticCell::new();
+            EXECUTOR
+                .init(Executor::new())
+                .run(|spawner| spawner.spawn(led_task(display).unwrap()));
+        },
+    );
+    info!("  ✓ LED output running on core 1");
 
     info!("");
     info!("Hardware initialization complete!");
@@ -180,6 +231,7 @@ async fn main(_spawner: Spawner) -> ! {
     let mut loop_count = 0u32;
     // Track gravity slowly and triple anything faster, so shaking the cube sloshes the fluid
     let mut motion = MotionFilter::new(0.05, 3.0);
+    let mut frame = FrameBuilder::<RGB8>::new();
 
     loop {
         // Read acceleration from IMU (includes magnitude, not just direction)
@@ -202,22 +254,13 @@ async fn main(_spawner: Spawner) -> ! {
         simulation.step(&motion.apply(acceleration));
         let physics_time = frame_start.elapsed();
 
-        // Clear display
-        if let Err(e) = display.clear().await {
-            warn!("Display clear failed: {:?}", e);
-        }
-
-        // Update display with active pixels
+        // Build the frame and hand it to core 1. This only waits if core 1 is still sending
+        // the frame before last, so physics and LED output overlap
+        frame.clear();
         for pixel in simulation.active_pixels() {
-            if let Err(e) = display.set_pixel(pixel.position, sim_config.color).await {
-                warn!("Failed to set pixel at {:?}: {:?}", pixel.position, e);
-            }
+            frame.set_pixel(pixel.position, sim_config.color);
         }
-
-        // Refresh display to show changes
-        if let Err(e) = display.refresh().await {
-            warn!("Display refresh failed: {:?}", e);
-        }
+        FRAMES.send(*frame.frame()).await;
 
         let frame_time = frame_start.elapsed();
 
@@ -230,7 +273,7 @@ async fn main(_spawner: Spawner) -> ! {
                 + acceleration.z * acceleration.z)
                 .sqrt();
             info!(
-                "Loop {}: {} particles, accel: ({:.2}, {:.2}, {:.2}) |{:.2}|g, physics {}us, frame {}us",
+                "Loop {}: {} particles, accel: ({:.2}, {:.2}, {:.2}) |{:.2}|g, physics {}us, frame {}us, LED send {}us",
                 loop_count,
                 active_count,
                 acceleration.x,
@@ -238,7 +281,8 @@ async fn main(_spawner: Spawner) -> ! {
                 acceleration.z,
                 magnitude,
                 physics_time.as_micros(),
-                frame_time.as_micros()
+                frame_time.as_micros(),
+                LED_SEND_US.load(Ordering::Relaxed)
             );
         }
 

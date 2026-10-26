@@ -152,13 +152,17 @@ Event loop with every-frame physics updates:
 
 **Firmware** (`firmware/src/main.rs`)
 
-Embassy async tasks orchestrating the main loop:
+Runs on both cores so physics and LED output overlap:
+
+Core 0 (main loop):
 1. Read gravity from IMU
 2. Run simulation step
-3. Clear display
-4. Update pixels (converts continuous positions to discrete grid)
-5. Refresh display
-6. Delay for frame rate (35ms default)
+3. Build the LED frame with `FrameBuilder` (converts continuous positions to discrete grid)
+4. Send the frame to core 1 over a one-slot channel (waits only if core 1 is still busy)
+5. Delay for frame rate (`delay_ms`)
+
+Core 1 (`led_task`, started with `esp_rtos::start_second_core`): receives frames and sends
+them to the LEDs with the blocking RMT driver (~11.5 ms per changed frame).
 
 ## Important Implementation Details
 
