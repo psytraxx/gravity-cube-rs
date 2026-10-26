@@ -136,7 +136,8 @@ WINIT_UNIX_BACKEND=x11 cargo run -p gravity-cube-desktop --release
 
 ### Controls
 
-- **Mouse Drag**: Rotate cube (changes gravity in local space)
+- **Mouse Drag**: Rotate cube (changes gravity in local space; fast drags swirl the fluid)
+- **Double Click**: Switch effect (fluid / boids)
 - **Arrow Keys**: Alternative rotation (Up/Down = pitch, Left/Right = yaw)
 - **Escape**: Exit
 
@@ -149,7 +150,7 @@ The desktop uses `Config::default()` (see `core/src/types.rs`):
 ```rust
 Config {
     cube_size: 8,
-    num_particles: 256,
+    num: 256,                    // Particles the effect runs with
     delay_ms: 35,                // Firmware frame delay (desktop updates every frame)
     color: Color::DEFAULT,
 }
@@ -166,7 +167,7 @@ Runs on ESP32 hardware with real IMU sensor and LED cube.
 ### Hardware Requirements
 
 - **MCU**: ESP32-S3 (target `xtensa-esp32s3-none-elf`)
-- **IMU**: BMI160 accelerometer (SPI)
+- **IMU**: BMI160 accelerometer + gyroscope (SPI); double-tap the cube to switch effect
 - **LEDs**: 384× WS2812B (6 panels of 8×8)
 - **LED Control**: RMT peripheral via GPIO 16
 
@@ -233,7 +234,10 @@ espflash flash --monitor target/xtensa-esp32s3-none-elf/release/firmware
 
 ### Configuration
 
-The firmware also uses `Config::default()` in `firmware/src/main.rs` (8×8×8 cube, 256 particles, 35ms frame delay, ~28 FPS). Override fields there if the ESP32 can't keep up, e.g. lower `num_particles`.
+The firmware also uses `Config::default()` in `firmware/src/main.rs` (8×8×8 cube, 256 particles, 35ms frame delay, ~28 FPS). Override fields there if the ESP32 can't keep up, e.g. lower `num`.
+
+Each effect gets its own `Config`, so particle count and colour are set per effect: the
+fluid runs 256 particles and the boids a flock of 32, passed to `EffectSwitcher::with_configs`.
 
 The physics tuning constants (gravity, damping, max velocity, smoothing, decay, collision repulsion/damping) are compile-time constants at the top of `core/src/effects/fluid.rs`.
 
@@ -366,7 +370,6 @@ cargo clippy -p gravity-cube-core -p gravity-cube-desktop -- -D warnings
 - `esp-hal`: ESP32 hardware abstraction
 - `esp-rtos`: RTOS integration for Embassy
 - `embassy-executor`, `embassy-time`: Async runtime
-- `bmi160`: IMU driver
 - `esp-hal-smartled`: WS2812 LED driver (RMT)
 
 ### Desktop

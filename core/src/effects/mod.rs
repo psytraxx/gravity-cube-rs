@@ -8,3 +8,6 @@ pub mod fluid;
 
 /// Boids flocking simulation with separation, alignment, and cohesion.
 pub mod boids;
+
+/// Switches between the effects at runtime.
+pub mod switcher;

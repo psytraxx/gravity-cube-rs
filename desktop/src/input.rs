@@ -1,4 +1,8 @@
+use std::time::{Duration, Instant};
 use winit::dpi::PhysicalPosition;
+
+/// Longest gap between two clicks that still counts as a double click.
+const DOUBLE_CLICK_TIME: Duration = Duration::from_millis(400);
 
 /// Handles mouse and keyboard input for cube rotation
 pub struct InputHandler {
@@ -10,6 +14,8 @@ pub struct InputHandler {
     rotate_right: bool,
     rotate_up: bool,
     rotate_down: bool,
+    /// Time of the last click that was not part of a double click.
+    last_click: Option<Instant>,
 }
 
 impl InputHandler {
@@ -23,6 +29,21 @@ impl InputHandler {
             rotate_right: false,
             rotate_up: false,
             rotate_down: false,
+            last_click: None,
+        }
+    }
+
+    /// Record a click and return whether it completes a double click.
+    pub fn register_click(&mut self, now: Instant) -> bool {
+        match self.last_click {
+            Some(last) if now.duration_since(last) <= DOUBLE_CLICK_TIME => {
+                self.last_click = None;
+                true
+            }
+            _ => {
+                self.last_click = Some(now);
+                false
+            }
         }
     }
 
@@ -87,5 +108,28 @@ impl InputHandler {
         }
 
         (dx, dy)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn two_quick_clicks_are_a_double_click() {
+        let mut input = InputHandler::new(100, 100);
+        let start = Instant::now();
+        assert!(!input.register_click(start));
+        assert!(input.register_click(start + Duration::from_millis(200)));
+        // The pair is used up: a third click starts a new pair
+        assert!(!input.register_click(start + Duration::from_millis(300)));
+    }
+
+    #[test]
+    fn slow_clicks_are_not_a_double_click() {
+        let mut input = InputHandler::new(100, 100);
+        let start = Instant::now();
+        assert!(!input.register_click(start));
+        assert!(!input.register_click(start + Duration::from_millis(600)));
     }
 }

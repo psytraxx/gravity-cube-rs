@@ -32,11 +32,12 @@ extern crate alloc;
 
 use esp_hal_smartled::{RmtSmartLeds, buffer_size, color_order};
 use gravity_cube_core::physics_utils::MotionFilter;
-use gravity_cube_core::{Color, Config, Simulation, SimulationEffect, Vector3D, Vector3DExt};
+use gravity_cube_core::{Color, Config, EffectSwitcher, SimulationEffect, Vector3D, Vector3DExt};
 use smart_leds::RGB8;
 use static_cell::{ConstStaticCell, StaticCell};
 
 mod adapters;
+use adapters::bmi160::ImuReading;
 use adapters::ws2812::Frame;
 use adapters::{Bmi160Adapter, FrameBuilder, LED_COUNT, Ws2812Display};
 
@@ -130,7 +131,7 @@ async fn main(_spawner: Spawner) -> ! {
         read_reg(0x0F)
     );
 
-    // Initialize BMI160 IMU
+    // Initialize BMI160 IMU; this also calibrates the gyro, so the cube should be still
     let mut imu_opt = match Bmi160Adapter::new(spi_device, &mut Delay::new()) {
         Ok(imu) => {
             info!("  ✓ BMI160 IMU initialized successfully");
@@ -143,7 +144,7 @@ async fn main(_spawner: Spawner) -> ! {
             warn!("      MISO → GPIO 13");
             warn!("      SCLK → GPIO 12");
             warn!("      CS   → GPIO 10");
-            warn!("    Continuing with default gravity (pointing down)");
+            warn!("    Continuing with default gravity (pointing down), no spin or taps");
             None
         }
     };
@@ -197,25 +198,32 @@ async fn main(_spawner: Spawner) -> ! {
 
     // Dim green only: a single channel draws a fraction of the current of white, and
     // the eye is most sensitive to green, so it stays visible at a low level
-    let sim_config = Config {
+    let fluid_config = Config {
+        num: 256,
         color: Color::new(0, 60, 0),
         delay_ms: 0,
         ..Config::default()
     };
+    // A few dozen boids read as a flock; dim amber so a double tap visibly changes the cube
+    let boids_config = Config {
+        num: 32,
+        color: Color::new(40, 20, 0),
+        ..fluid_config
+    };
 
-    let mut simulation = Simulation::new(sim_config);
-    simulation.populate(sim_config.num_particles);
+    let mut simulation = EffectSwitcher::with_configs(fluid_config, boids_config);
+    simulation.populate(fluid_config.num);
 
     info!(
         "  • Cube size: {}x{}x{}",
-        sim_config.cube_size, sim_config.cube_size, sim_config.cube_size
+        fluid_config.cube_size, fluid_config.cube_size, fluid_config.cube_size
     );
-    info!("  • Active particles: {}", sim_config.num_particles);
-    info!("  • Update rate: {}ms", sim_config.delay_ms);
     info!(
-        "  • LED color: RGB({}, {}, {})",
-        sim_config.color.r, sim_config.color.g, sim_config.color.b
+        "  • Particles: {} fluid, {} boids",
+        fluid_config.num, boids_config.num
     );
+    info!("  • Update rate: {}ms", fluid_config.delay_ms);
+    info!("  • Double-tap the cube to switch effects");
     info!("");
 
     // Wait for sensors to stabilize
@@ -229,36 +237,51 @@ async fn main(_spawner: Spawner) -> ! {
     // Main Loop
     // ========================================
     let mut loop_count = 0u32;
-    // Track gravity slowly and triple anything faster, so shaking the cube sloshes the fluid
+    // Track gravity with the gyro and triple anything else, so shaking the cube sloshes the fluid
     let mut motion = MotionFilter::new(0.05, 3.0);
     let mut frame = FrameBuilder::<RGB8>::new();
+    let mut last_read = Instant::now();
 
     loop {
-        // Read acceleration from IMU (includes magnitude, not just direction)
-        // This makes particles respond to shaking and sudden movements
-        let acceleration = if let Some(ref mut imu) = imu_opt {
-            match imu.read_acceleration() {
-                Ok(a) => a,
-                Err(_) => {
-                    warn!("Failed to read IMU, using default gravity");
-                    Vector3D::new(0.0, 0.0, -1.0)
-                }
-            }
-        } else {
-            // No IMU available, use default gravity (towards z == 0, physically the bottom)
-            Vector3D::new(0.0, 0.0, -1.0)
+        // No IMU (or a failed read): default gravity towards z == 0, physically the bottom
+        let resting = || ImuReading {
+            acceleration: Vector3D::new(0.0, 0.0, -1.0),
+            angular_velocity: Vector3D::new(0.0, 0.0, 0.0),
         };
 
-        // Run physics simulation step with gravity plus amplified motion
+        // Read acceleration (with magnitude, so shaking sloshes the fluid) and rotation rate
+        let reading = if let Some(ref mut imu) = imu_opt {
+            if let Ok(true) = imu.double_tapped() {
+                simulation.next_effect();
+                info!("Double tap: switched to {} effect", simulation.name());
+            }
+            imu.read().unwrap_or_else(|_| {
+                warn!("Failed to read IMU, using default gravity");
+                resting()
+            })
+        } else {
+            resting()
+        };
+        let acceleration = reading.acceleration;
+
+        // How far the cube turned since the last reading
+        let now = Instant::now();
+        let dt = (now - last_read).as_micros() as f32 * 1e-6;
+        last_read = now;
+        let rotation = reading.angular_velocity * dt;
+
+        // Run physics simulation step with gravity plus amplified motion, and the spin
         let frame_start = Instant::now();
-        simulation.step(&motion.apply(acceleration));
+        simulation.set_rotation(rotation);
+        simulation.step(&motion.apply(acceleration, rotation));
         let physics_time = frame_start.elapsed();
 
         // Build the frame and hand it to core 1. This only waits if core 1 is still sending
         // the frame before last, so physics and LED output overlap
+        let color = simulation.config().color;
         frame.clear();
         for pixel in simulation.active_pixels() {
-            frame.set_pixel(pixel.position, sim_config.color);
+            frame.set_pixel(pixel.position, color);
         }
         FRAMES.send(*frame.frame()).await;
 
@@ -273,13 +296,17 @@ async fn main(_spawner: Spawner) -> ! {
                 + acceleration.z * acceleration.z)
                 .sqrt();
             info!(
-                "Loop {}: {} particles, accel: ({:.2}, {:.2}, {:.2}) |{:.2}|g, physics {}us, frame {}us, LED send {}us",
+                "Loop {}: {} {} particles, accel: ({:.2}, {:.2}, {:.2}) |{:.2}|g, gyro: ({:.2}, {:.2}, {:.2}) rad/s, physics {}us, frame {}us, LED send {}us",
                 loop_count,
                 active_count,
+                simulation.name(),
                 acceleration.x,
                 acceleration.y,
                 acceleration.z,
                 magnitude,
+                reading.angular_velocity.x,
+                reading.angular_velocity.y,
+                reading.angular_velocity.z,
                 physics_time.as_micros(),
                 frame_time.as_micros(),
                 LED_SEND_US.load(Ordering::Relaxed)
@@ -287,6 +314,6 @@ async fn main(_spawner: Spawner) -> ! {
         }
 
         // Delay for next frame
-        Timer::after(Duration::from_millis(sim_config.delay_ms as u64)).await;
+        Timer::after(Duration::from_millis(simulation.config().delay_ms as u64)).await;
     }
 }

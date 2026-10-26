@@ -4,7 +4,8 @@ mod input;
 mod renderer3d;
 
 use cube_transform::CubeTransform;
-use gravity_cube_core::{Config, Simulation, SimulationEffect, Vector3DExt};
+use glam::Quat;
+use gravity_cube_core::{Color, Config, EffectSwitcher, SimulationEffect, Vector3D, Vector3DExt};
 use input::InputHandler;
 use renderer3d::{RenderError, Renderer3D};
 use std::sync::Arc;
@@ -26,32 +27,51 @@ struct App {
 
 struct State {
     renderer: Renderer3D,
-    simulation: Simulation,
+    simulation: EffectSwitcher,
     input_handler: InputHandler,
     cube_transform: CubeTransform,
+    /// Cube orientation at the previous update, to measure how far it turned since.
+    last_orientation: Quat,
     last_update: std::time::Instant,
 }
 
 impl State {
     async fn new(window: Arc<Window>) -> Self {
-        // Initialize simulation with fluid physics
-        let config = Config::default();
+        // Each effect has its own particle count and colour; a double click switches
+        let fluid_config = Config {
+            num: 256,
+            ..Config::default()
+        };
+        let boids_config = Config {
+            num: 32,
+            color: Color::new(255, 170, 60),
+            ..fluid_config
+        };
 
-        let renderer = Renderer3D::new(window, config.color).await;
+        let renderer = Renderer3D::new(window, fluid_config.color).await;
 
-        let mut simulation = Simulation::new(config);
-        simulation.populate(config.num_particles);
+        let mut simulation = EffectSwitcher::with_configs(fluid_config, boids_config);
+        simulation.populate(fluid_config.num);
 
         let input_handler = InputHandler::new(WINDOW_WIDTH, WINDOW_HEIGHT);
         let cube_transform = CubeTransform::new();
+        let last_orientation = cube_transform.orientation();
 
         Self {
             renderer,
             simulation,
             input_handler,
             cube_transform,
+            last_orientation,
             last_update: std::time::Instant::now(),
         }
+    }
+
+    /// Switch to the next effect and its colour.
+    fn next_effect(&mut self) {
+        self.simulation.next_effect();
+        self.renderer.set_color(self.simulation.config().color);
+        log::info!("Switched to {} effect", self.simulation.name());
     }
 
     fn update(&mut self) {
@@ -79,8 +99,14 @@ impl State {
         let accel_glam = self.cube_transform.get_local_gravity();
 
         // Convert glam::Vec3 to gravity_cube_core::Vector3D
-        let acceleration =
-            gravity_cube_core::Vector3D::new(accel_glam.x, accel_glam.y, accel_glam.z);
+        let acceleration = Vector3D::new(accel_glam.x, accel_glam.y, accel_glam.z);
+
+        // How far the cube turned this frame, in its own axes, so spinning it swirls the fluid
+        let orientation = self.cube_transform.orientation();
+        let turn = (self.last_orientation.inverse() * orientation).to_scaled_axis();
+        self.last_orientation = orientation;
+        self.simulation
+            .set_rotation(Vector3D::new(turn.x, turn.y, turn.z));
 
         // Update physics (every frame for smooth animation)
         self.simulation.step(&acceleration);
@@ -104,6 +130,9 @@ impl State {
                 if *button == winit::event::MouseButton::Left {
                     match state {
                         ElementState::Pressed => {
+                            if self.input_handler.register_click(std::time::Instant::now()) {
+                                self.next_effect();
+                            }
                             self.input_handler.start_drag(self.input_handler.mouse_pos);
                         }
                         ElementState::Released => {

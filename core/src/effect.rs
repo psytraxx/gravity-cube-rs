@@ -70,6 +70,12 @@ pub trait SimulationEffect {
     ///   effect-specific (gravity for fluid, wind for boids, etc.).
     fn step(&mut self, acceleration: &Vector3D);
 
+    /// Set how far the cube turned since the last step, as a rotation vector (axis times
+    /// radians) in cube axes. Applies to the following steps until set again.
+    ///
+    /// Effects that do not react to spinning keep the default, which ignores it.
+    fn set_rotation(&mut self, _rotation: Vector3D) {}
+
     /// Get access to particles for rendering.
     ///
     /// Returns a slice of all particles in the simulation.

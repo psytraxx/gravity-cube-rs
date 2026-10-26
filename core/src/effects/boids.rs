@@ -17,7 +17,7 @@ use micromath::F32Ext;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 
-use log::info;
+use log::debug;
 use micromath::vector::Vector;
 
 // Boids physics constants
@@ -50,6 +50,13 @@ const BOUNDARY_MARGIN: f32 = 1.5;
 /// Controls how much external acceleration (e.g., from tilting the cube)
 /// affects boid movement. Lower values maintain more autonomous flocking behavior.
 const WIND_SCALE: f32 = 0.05;
+
+/// How strongly spinning the cube sweeps the flock round. The flock is carried against the
+/// spin, like fish in a turning tank, while it keeps flocking.
+const SPIN_CURRENT: f32 = 0.5;
+
+/// Multiplier on the centrifugal acceleration of a spinning cube (see the fluid effect).
+const CENTRIFUGAL_GAIN: f32 = 20.0;
 
 /// Velocity damping on boundary collision (energy loss when hitting walls).
 const BOUNDARY_COLLISION_DAMPING: f32 = 0.5;
@@ -89,6 +96,8 @@ const SPEED_LIMIT_TOLERANCE: f32 = 0.9999;
 pub struct BoidsSimulation {
     particles: Vec<Particle>,
     config: Config,
+    /// Rotation of the cube per step (axis times radians), in cube axes.
+    rotation: Vector3D,
 }
 
 impl SimulationEffect for BoidsSimulation {
@@ -96,6 +105,7 @@ impl SimulationEffect for BoidsSimulation {
         Self {
             particles: Vec::new(),
             config,
+            rotation: Vector3D::new(0.0, 0.0, 0.0),
         }
     }
 
@@ -129,6 +139,9 @@ impl SimulationEffect for BoidsSimulation {
         let separation_dist = SEPARATION_DISTANCE;
         let max_speed = MAX_SPEED;
         let bound = (self.config.cube_size - 1) as f32;
+        let center = Vector3D::new(bound / 2.0, bound / 2.0, bound / 2.0);
+        let spin = self.rotation;
+        let spin_squared = spin.dot(spin);
 
         self.log_step_info(acceleration);
 
@@ -211,7 +224,12 @@ impl SimulationEffect for BoidsSimulation {
             // Add wind effect from acceleration
             let wind = *acceleration * WIND_SCALE;
 
-            forces[i] = separation + alignment + cohesion + boundary + wind;
+            // Spinning the cube sweeps the flock against the spin and out towards the walls
+            let offset = *pos - center;
+            let current = spin.cross(offset) * -SPIN_CURRENT;
+            let centrifugal = (offset * spin_squared - spin * spin.dot(offset)) * CENTRIFUGAL_GAIN;
+
+            forces[i] = separation + alignment + cohesion + boundary + wind + current + centrifugal;
         }
 
         // Apply forces and update positions
@@ -239,6 +257,10 @@ impl SimulationEffect for BoidsSimulation {
         }
     }
 
+    fn set_rotation(&mut self, rotation: Vector3D) {
+        self.rotation = rotation;
+    }
+
     fn particles(&self) -> &[Particle] {
         &self.particles
     }
@@ -258,8 +280,8 @@ impl SimulationEffect for BoidsSimulation {
 impl BoidsSimulation {
     fn log_step_info(&self, acceleration: &Vector3D) {
         let magnitude = acceleration.magnitude();
-        info!("=== Boids Step ===");
-        info!(
+        debug!("=== Boids Step ===");
+        debug!(
             "Wind: ({:.2}, {:.2}, {:.2}) |{:.2}|",
             acceleration.x, acceleration.y, acceleration.z, magnitude
         );
@@ -274,7 +296,7 @@ mod tests {
     fn test_config() -> crate::types::Config {
         crate::types::Config {
             cube_size: 8,
-            num_particles: 10,
+            num: 10,
             delay_ms: 35,
             color: Color::new(255, 200, 100),
         }
@@ -393,6 +415,28 @@ mod tests {
                 MAX_SPEED
             );
         }
+    }
+
+    #[test]
+    fn test_spin_sweeps_boid_against_spin() {
+        let config = test_config();
+        let mut sim = BoidsSimulation::new(config);
+        // One resting boid on the +X side of the centre (3.5), no wind
+        let mut boid = Particle::new(5.0, 3.5, 3.5);
+        boid.velocity = Vector3D::new(0.0, 0.0, 0.0);
+        sim.particles.push(boid);
+
+        // Spin the cube about +Z: a point on +X moves towards +Y with the cube
+        sim.set_rotation(Vector3D::new(0.0, 0.0, 0.05));
+        sim.step(&Vector3D::new(0.0, 0.0, 0.0));
+
+        let v = sim.particles[0].velocity;
+        assert!(
+            v.y < 0.0,
+            "boid should be swept against the spin, got {v:?}"
+        );
+        assert!(v.x > 0.0, "boid should be pushed outwards, got {v:?}");
+        assert!(v.z.abs() < 0.001, "no push along the spin axis, got {v:?}");
     }
 
     #[test]
