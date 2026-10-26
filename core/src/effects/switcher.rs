@@ -1,138 +1,106 @@
 //! Cycles between the simulation effects at runtime.
 
+use core::ops::{Deref, DerefMut};
+
 use crate::effect::SimulationEffect;
-use crate::effects::boids::BoidsSimulation;
-use crate::effects::fluid::FluidSimulation;
+use crate::effects::{
+    boids::BoidsSimulation, fluid::FluidSimulation, starfield::StarfieldSimulation,
+};
 use crate::types::*;
 
-/// Runs one effect at a time and switches to the next on request (a double tap on the
-/// cube, a double click on desktop).
+#[cfg(not(feature = "std"))]
+use alloc::{boxed::Box, vec, vec::Vec};
+
+/// Every effect, in the order a double tap cycles through them, with its particle count and
+/// full-brightness colour. Adding an effect only needs its module and a line here.
+fn effects(base: Config) -> Vec<EffectEntry> {
+    let config = |num, color| Config { num, color, ..base };
+    vec![
+        // Green only: one LED channel draws the least current on the cube
+        EffectEntry::new::<FluidSimulation>(config(256, Color::new(0, 255, 0))),
+        // A few dozen boids read as a flock; the fluid's hundreds would fill the cube
+        EffectEntry::new::<BoidsSimulation>(config(32, Color::new(255, 128, 0))),
+        EffectEntry::new::<StarfieldSimulation>(config(24, Color::new(160, 160, 255))),
+    ]
+}
+
+/// An effect the switcher can run: which effect, and the config it runs with.
+struct EffectEntry {
+    config: Config,
+    create: fn(Config) -> Box<dyn SimulationEffect>,
+}
+
+impl EffectEntry {
+    /// Run effect `E` with `config`.
+    fn new<E: SimulationEffect + 'static>(config: Config) -> Self {
+        Self {
+            config,
+            create: |config| Box::new(E::new(config)),
+        }
+    }
+
+    /// Create the effect, populated with `num` particles from its config.
+    fn start(&self) -> Box<dyn SimulationEffect> {
+        let mut effect = (self.create)(self.config);
+        effect.populate(self.config.num);
+        effect
+    }
+}
+
+/// Runs one effect at a time and cycles to the next on request (a double tap on the cube, a
+/// double click on desktop), wrapping round after the last.
 ///
-/// Each effect has its own [`Config`], so particle count and colour are set per effect.
+/// Dereferences to the running effect, so it is driven like any [`SimulationEffect`].
 ///
 /// # Example
 ///
 /// ```rust
 /// use gravity_cube_core::{Config, EffectSwitcher, SimulationEffect};
 ///
-/// let fluid = Config { num: 256, ..Config::default() };
-/// let boids = Config { num: 32, ..fluid };
-/// let mut effects = EffectSwitcher::with_configs(fluid, boids);
-/// effects.populate(effects.config().num);
+/// let mut effects = EffectSwitcher::new(Config::default());
 /// assert_eq!(effects.name(), "fluid");
 ///
 /// effects.next_effect();
 /// assert_eq!(effects.name(), "boids");
-/// assert_eq!(effects.particles().len(), 32);
+/// assert_eq!(effects.particles().len(), effects.config().num);
 /// ```
 pub struct EffectSwitcher {
-    effect: Effect,
-    fluid_config: Config,
-    boids_config: Config,
-}
-
-/// The running effect.
-enum Effect {
-    Fluid(FluidSimulation),
-    Boids(BoidsSimulation),
+    entries: Vec<EffectEntry>,
+    index: usize,
+    current: Box<dyn SimulationEffect>,
 }
 
 impl EffectSwitcher {
-    /// Start with the fluid effect, using each effect's own config whenever it runs.
-    pub fn with_configs(fluid_config: Config, boids_config: Config) -> Self {
+    /// Start the first effect. `base` sets the fields shared by every effect (cube size,
+    /// frame delay); each effect sets its own `num` and `color`.
+    pub fn new(base: Config) -> Self {
+        let entries = effects(base);
+        let current = entries[0].start();
         Self {
-            effect: Effect::Fluid(FluidSimulation::new(fluid_config)),
-            fluid_config,
-            boids_config,
+            entries,
+            index: 0,
+            current,
         }
     }
 
-    /// Replace the running effect with the next one, populated with `num` from its config.
+    /// Replace the running effect with the next one, starting it afresh.
     pub fn next_effect(&mut self) {
-        self.effect = match self.effect {
-            Effect::Fluid(_) => Effect::Boids(BoidsSimulation::new(self.boids_config)),
-            Effect::Boids(_) => Effect::Fluid(FluidSimulation::new(self.fluid_config)),
-        };
-        self.populate(self.config().num);
-    }
-
-    /// Short name of the running effect, for logs.
-    pub fn name(&self) -> &'static str {
-        match self.effect {
-            Effect::Fluid(_) => "fluid",
-            Effect::Boids(_) => "boids",
-        }
+        self.index = (self.index + 1) % self.entries.len();
+        self.current = self.entries[self.index].start();
     }
 }
 
-impl SimulationEffect for EffectSwitcher {
-    /// Starts with the fluid effect; every effect uses the same config.
-    fn new(config: Config) -> Self {
-        Self::with_configs(config, config)
-    }
+impl Deref for EffectSwitcher {
+    type Target = dyn SimulationEffect;
 
-    fn populate(&mut self, num_particles: usize) {
-        match &mut self.effect {
-            Effect::Fluid(sim) => sim.populate(num_particles),
-            Effect::Boids(sim) => sim.populate(num_particles),
-        }
-    }
-
-    fn step(&mut self, acceleration: &Vector3D) {
-        match &mut self.effect {
-            Effect::Fluid(sim) => sim.step(acceleration),
-            Effect::Boids(sim) => sim.step(acceleration),
-        }
-    }
-
-    fn set_rotation(&mut self, rotation: Vector3D) {
-        match &mut self.effect {
-            Effect::Fluid(sim) => sim.set_rotation(rotation),
-            Effect::Boids(sim) => sim.set_rotation(rotation),
-        }
-    }
-
-    fn particles(&self) -> &[Particle] {
-        match &self.effect {
-            Effect::Fluid(sim) => sim.particles(),
-            Effect::Boids(sim) => sim.particles(),
-        }
-    }
-
-    fn active_pixels(&self) -> impl Iterator<Item = Pixel> + '_ {
-        match &self.effect {
-            Effect::Fluid(sim) => Pixels::Fluid(sim.active_pixels()),
-            Effect::Boids(sim) => Pixels::Boids(sim.active_pixels()),
-        }
-    }
-
-    /// Config of the running effect.
-    fn config(&self) -> &Config {
-        match &self.effect {
-            Effect::Fluid(sim) => sim.config(),
-            Effect::Boids(sim) => sim.config(),
-        }
+    fn deref(&self) -> &Self::Target {
+        self.current.as_ref()
     }
 }
 
-/// Pixel iterator of whichever effect is running.
-enum Pixels<F, B> {
-    Fluid(F),
-    Boids(B),
-}
-
-impl<F, B> Iterator for Pixels<F, B>
-where
-    F: Iterator<Item = Pixel>,
-    B: Iterator<Item = Pixel>,
-{
-    type Item = Pixel;
-
-    fn next(&mut self) -> Option<Pixel> {
-        match self {
-            Self::Fluid(pixels) => pixels.next(),
-            Self::Boids(pixels) => pixels.next(),
-        }
+impl DerefMut for EffectSwitcher {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.current.as_mut()
     }
 }
 
@@ -141,28 +109,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn next_effect_uses_each_effects_config() {
-        let fluid = Config {
-            num: 256,
-            ..Config::default()
-        };
-        let boids = Config {
-            num: 32,
-            color: Color::new(255, 170, 60),
-            ..fluid
-        };
-        let mut effects = EffectSwitcher::with_configs(fluid, boids);
-        effects.populate(effects.config().num);
+    fn next_effect_cycles_through_every_effect_and_wraps() {
+        let base = Config::default();
+        let mut switcher = EffectSwitcher::new(base);
+        let entries = effects(base);
 
-        effects.next_effect();
-        assert_eq!(effects.name(), "boids");
-        assert_eq!(effects.particles().len(), 32);
-        assert_eq!(effects.config().color, boids.color);
-
-        effects.next_effect();
-        assert_eq!(effects.name(), "fluid");
-        assert_eq!(effects.particles().len(), 256);
-        assert_eq!(effects.active_pixels().count(), 256);
-        assert_eq!(effects.config().color, fluid.color);
+        for i in 1..=entries.len() {
+            switcher.next_effect();
+            let expected = &entries[i % entries.len()].config;
+            assert_eq!(switcher.particles().len(), expected.num);
+            assert_eq!(switcher.active_pixels().count(), expected.num);
+            assert_eq!(switcher.config().color, expected.color);
+        }
+        assert_eq!(switcher.name(), "fluid");
     }
 }

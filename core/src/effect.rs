@@ -5,12 +5,18 @@
 
 use super::types::*;
 
+#[cfg(not(feature = "std"))]
+use alloc::boxed::Box;
+
 /// Common interface for all simulation effects.
 ///
 /// This trait defines the core operations that all effects must implement
 /// to be compatible with both firmware and desktop platforms. All effects
 /// use the same [`Config`] struct for common parameters (cube size, particle
 /// count, etc.), but may have effect-specific physics constants.
+///
+/// The trait is object safe, so effects can be swapped at runtime behind a
+/// `Box<dyn SimulationEffect>` (see [`EffectSwitcher`](crate::EffectSwitcher)).
 ///
 /// # Example
 ///
@@ -22,14 +28,15 @@ use super::types::*;
 /// #     fn new(config: Config) -> Self {
 /// #         MyEffect { particles: Vec::new(), config }
 /// #     }
+/// #     fn name(&self) -> &'static str { "my effect" }
 /// #     fn populate(&mut self, _: usize) {}
 /// #     fn step(&mut self, _: &Vector3D) {}
 /// #     fn particles(&self) -> &[gravity_cube_core::Particle] { &self.particles }
-/// #     fn active_pixels(&self) -> impl Iterator<Item = gravity_cube_core::Pixel> + '_ {
-/// #         self.particles.iter().map(|p| {
+/// #     fn active_pixels(&self) -> Box<dyn Iterator<Item = gravity_cube_core::Pixel> + '_> {
+/// #         Box::new(self.particles.iter().map(|p| {
 /// #             let pos = p.grid_position();
 /// #             gravity_cube_core::Pixel::new(pos.x, pos.y, pos.z)
-/// #         })
+/// #         }))
 /// #     }
 /// #     fn config(&self) -> &Config { &self.config }
 /// # }
@@ -45,7 +52,12 @@ pub trait SimulationEffect {
     /// Create a new simulation instance with the given configuration.
     ///
     /// The simulation starts empty. Call [`populate`](Self::populate) to add particles.
-    fn new(config: Config) -> Self;
+    fn new(config: Config) -> Self
+    where
+        Self: Sized;
+
+    /// Short name of the effect, for logs.
+    fn name(&self) -> &'static str;
 
     /// Initialize particles or other state for the simulation.
     ///
@@ -86,7 +98,7 @@ pub trait SimulationEffect {
     ///
     /// Converts continuous particle positions to discrete grid positions.
     /// Used by firmware for WS2812 LED control.
-    fn active_pixels(&self) -> impl Iterator<Item = Pixel> + '_;
+    fn active_pixels(&self) -> Box<dyn Iterator<Item = Pixel> + '_>;
 
     /// Get the effect's configuration.
     fn config(&self) -> &Config;

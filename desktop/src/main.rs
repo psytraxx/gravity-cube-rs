@@ -5,7 +5,7 @@ mod renderer3d;
 
 use cube_transform::CubeTransform;
 use glam::Quat;
-use gravity_cube_core::{Color, Config, EffectSwitcher, SimulationEffect, Vector3D, Vector3DExt};
+use gravity_cube_core::{Config, EffectSwitcher, Vector3D, Vector3DExt};
 use input::InputHandler;
 use renderer3d::{RenderError, Renderer3D};
 use std::sync::Arc;
@@ -37,21 +37,9 @@ struct State {
 
 impl State {
     async fn new(window: Arc<Window>) -> Self {
-        // Each effect has its own particle count and colour; a double click switches
-        let fluid_config = Config {
-            num: 256,
-            ..Config::default()
-        };
-        let boids_config = Config {
-            num: 32,
-            color: Color::new(255, 170, 60),
-            ..fluid_config
-        };
-
-        let renderer = Renderer3D::new(window, fluid_config.color).await;
-
-        let mut simulation = EffectSwitcher::with_configs(fluid_config, boids_config);
-        simulation.populate(fluid_config.num);
+        // Each effect sets its own particle count and colour; a double click switches
+        let simulation = EffectSwitcher::new(Config::default());
+        let renderer = Renderer3D::new(window, simulation.config().color).await;
 
         let input_handler = InputHandler::new(WINDOW_WIDTH, WINDOW_HEIGHT);
         let cube_transform = CubeTransform::new();

@@ -137,7 +137,7 @@ WINIT_UNIX_BACKEND=x11 cargo run -p gravity-cube-desktop --release
 ### Controls
 
 - **Mouse Drag**: Rotate cube (changes gravity in local space; fast drags swirl the fluid)
-- **Double Click**: Switch effect (fluid / boids)
+- **Double Click**: Switch effect (fluid → boids → starfield)
 - **Arrow Keys**: Alternative rotation (Up/Down = pitch, Left/Right = yaw)
 - **Escape**: Exit
 
@@ -236,8 +236,9 @@ espflash flash --monitor target/xtensa-esp32s3-none-elf/release/firmware
 
 The firmware also uses `Config::default()` in `firmware/src/main.rs` (8×8×8 cube, 256 particles, 35ms frame delay, ~28 FPS). Override fields there if the ESP32 can't keep up, e.g. lower `num`.
 
-Each effect gets its own `Config`, so particle count and colour are set per effect: the
-fluid runs 256 particles and the boids a flock of 32, passed to `EffectSwitcher::with_configs`.
+Each effect sets its own particle count and colour in one place, `effects()` in
+`core/src/effects/switcher.rs`: the fluid runs 256 particles, the boids a flock of 32 and the
+starfield 24 stars. To add an effect, implement `SimulationEffect` and add a line there.
 
 The physics tuning constants (gravity, damping, max velocity, smoothing, decay, collision repulsion/damping) are compile-time constants at the top of `core/src/effects/fluid.rs`.
 

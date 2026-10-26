@@ -12,7 +12,7 @@ use micromath::vector::Vector;
 use micromath::F32Ext;
 
 #[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
+use alloc::{boxed::Box, vec::Vec};
 
 /// Collision detection threshold - particles closer than this distance will repel.
 const COLLISION_THRESHOLD: f32 = 1.0;
@@ -191,6 +191,10 @@ impl SimulationEffect for FluidSimulation {
         }
     }
 
+    fn name(&self) -> &'static str {
+        "fluid"
+    }
+
     fn populate(&mut self, num_particles: usize) {
         self.particles.clear();
         self.cells.clear();
@@ -271,11 +275,11 @@ impl SimulationEffect for FluidSimulation {
         &self.particles
     }
 
-    fn active_pixels(&self) -> impl Iterator<Item = Pixel> + '_ {
-        self.particles.iter().enumerate().map(|(i, p)| {
+    fn active_pixels(&self) -> Box<dyn Iterator<Item = Pixel> + '_> {
+        Box::new(self.particles.iter().enumerate().map(|(i, p)| {
             let cell = self.cells.get(i).copied().unwrap_or(p.grid_position());
             Pixel::new(cell.x, cell.y, cell.z)
-        })
+        }))
     }
 
     fn config(&self) -> &Config {

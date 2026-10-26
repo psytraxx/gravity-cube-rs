@@ -15,7 +15,7 @@ use crate::types::*;
 use micromath::F32Ext;
 
 #[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
+use alloc::{boxed::Box, vec::Vec};
 
 use log::debug;
 use micromath::vector::Vector;
@@ -107,6 +107,10 @@ impl SimulationEffect for BoidsSimulation {
             config,
             rotation: Vector3D::new(0.0, 0.0, 0.0),
         }
+    }
+
+    fn name(&self) -> &'static str {
+        "boids"
     }
 
     fn populate(&mut self, num_particles: usize) {
@@ -265,11 +269,11 @@ impl SimulationEffect for BoidsSimulation {
         &self.particles
     }
 
-    fn active_pixels(&self) -> impl Iterator<Item = Pixel> + '_ {
-        self.particles.iter().map(|p| {
+    fn active_pixels(&self) -> Box<dyn Iterator<Item = Pixel> + '_> {
+        Box::new(self.particles.iter().map(|p| {
             let grid_pos = p.grid_position();
             Pixel::new(grid_pos.x, grid_pos.y, grid_pos.z)
-        })
+        }))
     }
 
     fn config(&self) -> &Config {
