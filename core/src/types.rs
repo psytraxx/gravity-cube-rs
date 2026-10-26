@@ -21,6 +21,9 @@ pub trait Vector3DExt {
 
     /// Normalize vector to unit length
     fn normalized(&self) -> Self;
+
+    /// Cross product
+    fn cross(&self, other: Self) -> Self;
 }
 
 impl Vector3DExt for Vector3D {
@@ -42,6 +45,14 @@ impl Vector3DExt for Vector3D {
                 y: 0.0,
                 z: 0.0,
             }
+        }
+    }
+
+    fn cross(&self, other: Self) -> Self {
+        F32x3 {
+            x: self.y * other.z - self.z * other.y,
+            y: self.z * other.x - self.x * other.z,
+            z: self.x * other.y - self.y * other.x,
         }
     }
 }

@@ -5,6 +5,7 @@
 
 use crate::effect::SimulationEffect;
 use crate::types::*;
+use micromath::vector::Vector;
 
 #[cfg(not(feature = "std"))]
 #[allow(unused_imports)]
@@ -47,6 +48,15 @@ const COLLISION_STIFFNESS: f32 = 0.8;
 
 /// Collision solver passes per step. More passes keep a deep pile from compressing.
 const SOLVER_ITERATIONS: usize = 4;
+
+/// Fraction of the cube's spin the fluid resists each step. Spinning the cube turns it under
+/// the fluid, so in cube space the fluid slides back against the spin (0.0-1.0).
+const ROTATION_LAG: f32 = 0.7;
+
+/// Multiplier on the centrifugal acceleration of a spinning cube. The real force at
+/// hand-spin speeds is far weaker than gravity; this makes spinning visibly push the
+/// fluid out to the walls.
+const CENTRIFUGAL_GAIN: f32 = 20.0;
 
 /// How far (in cells) a particle must move from its displayed cell's centre before its LED
 /// moves. Values above 0.5 stop particles sitting on a cell boundary from flickering.
@@ -164,6 +174,8 @@ pub struct FluidSimulation {
     cells: Vec<Position>,
     /// Positions at the start of the current step, used to derive velocities.
     previous: Vec<Vector3D>,
+    /// Rotation of the cube per step (axis times radians), in cube axes.
+    rotation: Vector3D,
 }
 
 impl SimulationEffect for FluidSimulation {
@@ -175,6 +187,7 @@ impl SimulationEffect for FluidSimulation {
             grid,
             cells: Vec::new(),
             previous: Vec::new(),
+            rotation: Vector3D::new(0.0, 0.0, 0.0),
         }
     }
 
@@ -207,18 +220,29 @@ impl SimulationEffect for FluidSimulation {
     fn step(&mut self, acceleration: &Vector3D) {
         let bound = self.config.cube_size as f32 - 1.0;
         let scaled_accel = *acceleration * (ACCELERATION_SCALE * GRAVITY);
+        let center = Vector3D::new(bound / 2.0, bound / 2.0, bound / 2.0);
+        let spin = self.rotation;
+        let spin_squared = spin.dot(spin);
 
         // Integrate velocity and move every particle to its predicted position
         self.previous.clear();
         for particle in self.particles.iter_mut() {
             self.previous.push(particle.position);
 
-            particle.velocity = particle.velocity * VELOCITY_SMOOTHING + scaled_accel;
+            // In a spinning cube, the part of the offset from the centre that is
+            // perpendicular to the spin axis is flung outwards
+            let offset = particle.position - center;
+            let centrifugal = (offset * spin_squared - spin * spin.dot(offset)) * CENTRIFUGAL_GAIN;
+
+            particle.velocity = particle.velocity * VELOCITY_SMOOTHING + scaled_accel + centrifugal;
             particle.velocity.x = particle.velocity.x.clamp(-MAX_VELOCITY, MAX_VELOCITY);
             particle.velocity.y = particle.velocity.y.clamp(-MAX_VELOCITY, MAX_VELOCITY);
             particle.velocity.z = particle.velocity.z.clamp(-MAX_VELOCITY, MAX_VELOCITY);
 
-            particle.position += particle.velocity;
+            // The fluid partly stays put while the cube turns, so it slides against the spin
+            let lag = spin.cross(offset) * -ROTATION_LAG;
+
+            particle.position += particle.velocity + lag;
             clamp_to_cube(&mut particle.position, bound);
         }
 
@@ -237,6 +261,10 @@ impl SimulationEffect for FluidSimulation {
         }
 
         self.update_cells();
+    }
+
+    fn set_rotation(&mut self, rotation: Vector3D) {
+        self.rotation = rotation;
     }
 
     fn particles(&self) -> &[Particle] {
@@ -636,5 +664,44 @@ mod tests {
         }
         let changed = changed_pixels(&mut sim, &gravity, 100);
         assert_eq!(changed, 0, "LEDs still changing after settling");
+    }
+
+    #[test]
+    fn test_spinning_lags_and_flings_fluid_outwards() {
+        let config = test_config();
+        let mut sim = FluidSimulation::new(config);
+        // One particle on the +X side of the centre (3.5), no gravity
+        sim.particles.push(Particle::new(5.0, 3.5, 3.5));
+        let no_gravity = Vector3D::new(0.0, 0.0, 0.0);
+
+        // Spin the cube about +Z: a point on +X moves towards +Y with the cube
+        sim.set_rotation(Vector3D::new(0.0, 0.0, 0.05));
+        sim.step(&no_gravity);
+
+        let p = sim.particles[0].position;
+        assert!(p.y < 3.5, "fluid should slide against the spin, got {p:?}");
+        assert!(p.x > 5.0, "fluid should be flung outwards, got {p:?}");
+        assert!(
+            (p.z - 3.5).abs() < 0.001,
+            "no push along the spin axis, got {p:?}"
+        );
+    }
+
+    #[test]
+    fn test_particle_on_spin_axis_stays_put() {
+        let config = test_config();
+        let mut sim = FluidSimulation::new(config);
+        sim.particles.push(Particle::new(3.5, 3.5, 1.0));
+
+        sim.set_rotation(Vector3D::new(0.0, 0.0, 0.05));
+        for _ in 0..10 {
+            sim.step(&Vector3D::new(0.0, 0.0, 0.0));
+        }
+
+        let p = sim.particles[0].position;
+        assert!(
+            (p.x - 3.5).abs() < 0.001 && (p.y - 3.5).abs() < 0.001,
+            "got {p:?}"
+        );
     }
 }

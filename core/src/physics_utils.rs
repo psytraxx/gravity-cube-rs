@@ -3,8 +3,12 @@
 //! This module provides common physics operations used across multiple simulation
 //! implementations, reducing code duplication and improving maintainability.
 
-use crate::types::Vector3D;
+use crate::types::{Vector3D, Vector3DExt};
 use micromath::vector::Vector;
+
+#[cfg(not(feature = "std"))]
+#[allow(unused_imports)]
+use micromath::F32Ext;
 
 /// Apply boundary collision for a single axis.
 ///
@@ -140,9 +144,14 @@ pub fn distance_squared(p1: &Vector3D, p2: &Vector3D) -> f32 {
 /// Splits an accelerometer reading into slow gravity and fast motion, and amplifies the
 /// motion so that shaking or jerking the device visibly sloshes the fluid.
 ///
-/// Gravity is tracked with a low-pass filter. Whatever the reading adds on top of it is
-/// the device's own acceleration (already pointing the way the fluid should lag), and is
-/// scaled by `gain` before being added back.
+/// Gravity is tracked with a complementary filter: each reading the estimate is first turned
+/// by the gyro's rotation (gravity is fixed in the world, so a tilt moves it immediately),
+/// then nudged towards the accelerometer to cancel gyro drift. Whatever the reading adds on
+/// top of it is the device's own acceleration (already pointing the way the fluid should
+/// lag), and is scaled by `gain` before being added back.
+///
+/// Without the gyro (a zero rotation) the estimate lags behind a tilt, and the tilt itself
+/// is amplified as if it were a shake.
 ///
 /// # Example
 ///
@@ -150,11 +159,12 @@ pub fn distance_squared(p1: &Vector3D, p2: &Vector3D) -> f32 {
 /// use gravity_cube_core::{Vector3D, Vector3DExt};
 /// use gravity_cube_core::physics_utils::MotionFilter;
 ///
+/// let still = Vector3D::new(0.0, 0.0, 0.0);
 /// let mut filter = MotionFilter::new(0.05, 3.0);
 /// let rest = Vector3D::new(0.0, 0.0, -1.0);
-/// assert_eq!(filter.apply(rest), rest); // A steady reading passes through unchanged
+/// assert_eq!(filter.apply(rest, still), rest); // A steady reading passes through unchanged
 ///
-/// let jolt = filter.apply(Vector3D::new(0.5, 0.0, -1.0));
+/// let jolt = filter.apply(Vector3D::new(0.5, 0.0, -1.0), still);
 /// assert!(jolt.x > 0.5); // A sudden change is amplified
 /// ```
 #[derive(Debug, Clone, Copy)]
@@ -176,9 +186,16 @@ impl MotionFilter {
     }
 
     /// Feed one reading and return gravity plus amplified motion.
-    pub fn apply(&mut self, reading: Vector3D) -> Vector3D {
+    ///
+    /// `rotation` is the angle the device turned since the last reading, as a rotation vector
+    /// (axis times radians) in the same axes as `reading`.
+    pub fn apply(&mut self, reading: Vector3D, rotation: Vector3D) -> Vector3D {
         let gravity = match self.gravity {
-            Some(g) => g + (reading - g) * self.smoothing,
+            Some(g) => {
+                // A vector fixed in the world turns the opposite way to the device
+                let turned = rotate(g, rotation * -1.0);
+                turned + (reading - turned) * self.smoothing
+            }
             None => reading,
         };
         self.gravity = Some(gravity);
@@ -186,10 +203,20 @@ impl MotionFilter {
     }
 }
 
+/// Rotate `v` by a rotation vector (axis times angle in radians), using Rodrigues' formula.
+pub fn rotate(v: Vector3D, rotation: Vector3D) -> Vector3D {
+    let angle = rotation.magnitude();
+    if angle < 1e-6 {
+        return v;
+    }
+    let axis = rotation * (1.0 / angle);
+    let (sin, cos) = (angle.sin(), angle.cos());
+    v * cos + axis.cross(v) * sin + axis * (axis.dot(v) * (1.0 - cos))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::Vector3DExt;
 
     #[test]
     fn test_axis_boundary_lower() {
@@ -263,20 +290,47 @@ mod tests {
         assert_eq!(dist_sq, 25.0);
     }
 
+    const STILL: Vector3D = Vector3D {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+    };
+
     #[test]
     fn motion_filter_settles_back_to_gravity() {
         let mut filter = MotionFilter::new(0.05, 3.0);
-        filter.apply(Vector3D::new(0.0, 0.0, -1.0));
+        filter.apply(Vector3D::new(0.0, 0.0, -1.0), STILL);
 
         // Tilted and held still: the amplified overshoot decays to the new reading
         let tilted = Vector3D::new(1.0, 0.0, 0.0);
-        let first = filter.apply(tilted);
+        let first = filter.apply(tilted, STILL);
         assert!(first.x > 1.0);
         let mut out = first;
         for _ in 0..300 {
-            out = filter.apply(tilted);
+            out = filter.apply(tilted, STILL);
         }
         assert!((out.x - 1.0).abs() < 0.01);
         assert!(out.z.abs() < 0.01);
+    }
+
+    #[test]
+    fn motion_filter_follows_gyro_tilt_without_overshoot() {
+        let mut filter = MotionFilter::new(0.05, 3.0);
+        filter.apply(Vector3D::new(0.0, 0.0, -1.0), STILL);
+
+        // Tilt by 90 degrees about Y in 30 steps, with the accelerometer agreeing with the
+        // gyro the whole way: gravity should follow the tilt and never be amplified
+        let steps = 30;
+        let step_angle = core::f32::consts::FRAC_PI_2 / steps as f32;
+        for i in 1..=steps {
+            // The device turns +Y, so gravity seen from the device turns from -Z towards +X
+            let angle = step_angle * i as f32;
+            let reading = Vector3D::new(angle.sin(), 0.0, -angle.cos());
+            let out = filter.apply(reading, Vector3D::new(0.0, step_angle, 0.0));
+            assert!(
+                distance_squared(&out, &reading) < 0.02 * 0.02,
+                "step {i}: {out:?} vs {reading:?}"
+            );
+        }
     }
 }

@@ -298,15 +298,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bmi160"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08f182c4a544e32f77368cd53034ce184b2d7d41ed58c95c5b3a65893ae2c2aa"
-dependencies = [
- "embedded-hal 1.0.0",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1673,7 +1664,6 @@ dependencies = [
 name = "gravity-cube-firmware"
 version = "0.2.0"
 dependencies = [
- "bmi160",
  "critical-section",
  "embassy-executor",
  "embassy-sync 0.8.0",

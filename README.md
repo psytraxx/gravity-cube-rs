@@ -136,7 +136,8 @@ WINIT_UNIX_BACKEND=x11 cargo run -p gravity-cube-desktop --release
 
 ### Controls
 
-- **Mouse Drag**: Rotate cube (changes gravity in local space)
+- **Mouse Drag**: Rotate cube (changes gravity in local space; fast drags swirl the fluid)
+- **Double Click**: Switch effect (fluid / boids)
 - **Arrow Keys**: Alternative rotation (Up/Down = pitch, Left/Right = yaw)
 - **Escape**: Exit
 
@@ -166,7 +167,7 @@ Runs on ESP32 hardware with real IMU sensor and LED cube.
 ### Hardware Requirements
 
 - **MCU**: ESP32-S3 (target `xtensa-esp32s3-none-elf`)
-- **IMU**: BMI160 accelerometer (SPI)
+- **IMU**: BMI160 accelerometer + gyroscope (SPI); double-tap the cube to switch effect
 - **LEDs**: 384× WS2812B (6 panels of 8×8)
 - **LED Control**: RMT peripheral via GPIO 16
 
@@ -366,7 +367,6 @@ cargo clippy -p gravity-cube-core -p gravity-cube-desktop -- -D warnings
 - `esp-hal`: ESP32 hardware abstraction
 - `esp-rtos`: RTOS integration for Embassy
 - `embassy-executor`, `embassy-time`: Async runtime
-- `bmi160`: IMU driver
 - `esp-hal-smartled`: WS2812 LED driver (RMT)
 
 ### Desktop
