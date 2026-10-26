@@ -32,7 +32,7 @@ extern crate alloc;
 
 use esp_hal_smartled::{RmtSmartLeds, buffer_size, color_order};
 use gravity_cube_core::physics_utils::MotionFilter;
-use gravity_cube_core::{Color, Config, EffectSwitcher, SimulationEffect, Vector3D, Vector3DExt};
+use gravity_cube_core::{Color, Config, EffectSwitcher, Vector3D, Vector3DExt};
 use smart_leds::RGB8;
 use static_cell::{ConstStaticCell, StaticCell};
 
@@ -43,6 +43,16 @@ use adapters::{Bmi160Adapter, FrameBuilder, LED_COUNT, Ws2812Display};
 
 // This creates a default app-descriptor required by the esp-idf bootloader.
 esp_bootloader_esp_idf::esp_app_desc!();
+
+/// LED brightness out of 255. Effect colours are full brightness; at full power 384 LEDs
+/// would draw far too much current, and dim colours stay clearly visible.
+const BRIGHTNESS: u16 = 60;
+
+/// Scale a full-brightness effect colour down to `BRIGHTNESS`.
+fn dimmed(color: Color) -> Color {
+    let scale = |c: u8| (c as u16 * BRIGHTNESS / 255) as u8;
+    Color::new(scale(color.r), scale(color.g), scale(color.b))
+}
 
 type LedDriver =
     RmtSmartLeds<'static, { buffer_size::<RGB8>(LED_COUNT) }, Blocking, RGB8, color_order::Grb>;
@@ -196,33 +206,23 @@ async fn main(_spawner: Spawner) -> ! {
     // ========================================
     info!("Initializing physics simulation...");
 
-    // Dim green only: a single channel draws a fraction of the current of white, and
-    // the eye is most sensitive to green, so it stays visible at a low level
-    let fluid_config = Config {
-        num: 256,
-        color: Color::new(0, 60, 0),
+    // Each effect sets its own particle count and colour
+    let sim_config = Config {
         delay_ms: 0,
         ..Config::default()
     };
-    // A few dozen boids read as a flock; dim amber so a double tap visibly changes the cube
-    let boids_config = Config {
-        num: 32,
-        color: Color::new(40, 20, 0),
-        ..fluid_config
-    };
-
-    let mut simulation = EffectSwitcher::with_configs(fluid_config, boids_config);
-    simulation.populate(fluid_config.num);
+    let mut simulation = EffectSwitcher::new(sim_config);
 
     info!(
         "  • Cube size: {}x{}x{}",
-        fluid_config.cube_size, fluid_config.cube_size, fluid_config.cube_size
+        sim_config.cube_size, sim_config.cube_size, sim_config.cube_size
     );
     info!(
-        "  • Particles: {} fluid, {} boids",
-        fluid_config.num, boids_config.num
+        "  • Effect: {} ({} particles)",
+        simulation.name(),
+        simulation.config().num
     );
-    info!("  • Update rate: {}ms", fluid_config.delay_ms);
+    info!("  • Update rate: {}ms", sim_config.delay_ms);
     info!("  • Double-tap the cube to switch effects");
     info!("");
 
@@ -278,7 +278,7 @@ async fn main(_spawner: Spawner) -> ! {
 
         // Build the frame and hand it to core 1. This only waits if core 1 is still sending
         // the frame before last, so physics and LED output overlap
-        let color = simulation.config().color;
+        let color = dimmed(simulation.config().color);
         frame.clear();
         for pixel in simulation.active_pixels() {
             frame.set_pixel(pixel.position, color);

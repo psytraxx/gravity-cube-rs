@@ -9,5 +9,8 @@ pub mod fluid;
 /// Boids flocking simulation with separation, alignment, and cohesion.
 pub mod boids;
 
+/// Starfield streaming out of the centre, fixed in the world as the cube turns.
+pub mod starfield;
+
 /// Switches between the effects at runtime.
 pub mod switcher;

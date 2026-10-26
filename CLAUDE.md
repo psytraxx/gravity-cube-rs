@@ -97,8 +97,13 @@ Core business logic with no hardware dependencies:
 - **effects/**: Simulation effect implementations
   - **fluid.rs**: Fluid physics simulation with particle collision detection
   - **boids.rs**: Flocking/swarming behavior simulation (tilt acts as wind, spin sweeps the flock round)
-  - **switcher.rs**: `EffectSwitcher` runs one effect and cycles to the next on a double tap
-    (firmware) or double click (desktop)
+  - **starfield.rs**: Stars stream out of the centre and accelerate; the field is fixed in the
+    world, so turning the cube turns it around the stars (each step, star offsets are rotated
+    by the inverse of `set_rotation`). Ignores gravity
+  - **switcher.rs**: `EffectSwitcher` runs one effect and cycles fluid → boids → starfield on
+    a double tap (firmware) or double click (desktop). It dereferences to the running
+    `dyn SimulationEffect`. `effects()` is the single list of effects, each with its own
+    particle count and colour: add a new effect there
 - **physics_utils.rs**: Shared physics utilities used across effects
   - `apply_axis_boundary()`: Single-axis boundary collision with damping
   - `apply_boundary_3d()`: 3D boundary collision helper
@@ -214,25 +219,19 @@ The simulation uses a continuous floating-point particle system with fluid-like 
 
 **Desktop**: Edit in `desktop/src/main.rs`
 
-Both use the same Config struct; each effect gets its own (`EffectSwitcher::with_configs(fluid, boids)`), so particle count and colour are per effect:
+Both pass a base `Config` to `EffectSwitcher::new`; it sets the fields shared by every effect.
+Each effect's particle count (`num`) and full-brightness colour are set once in
+`core/src/effects/switcher.rs` (`effects()`); the firmware dims colours with `BRIGHTNESS`.
 ```rust
 let sim_config = Config {
     cube_size: 8,
-    num: 256,                    // Particles: 256 for the fluid, 32 for the boids config
-    velocity: 2.0,               // Legacy field (unused by fluid sim)
-    delay_ms: 35,                // Frame delay (firmware only)
-    color: Color::new(100, 180, 255),  // Cyan for water appearance
-
-    // Fluid physics parameters
-    gravity: 0.08,               // Gravity strength multiplier
-    damping: 0.92,               // Velocity reduction on boundary bounce
-    max_velocity: 0.6,           // Maximum velocity clamp
-    velocity_smoothing: 0.9,     // Acceleration integration smoothing
-    velocity_decay: 0.95,        // Per-frame velocity decay (friction)
-    collision_repulsion: 0.5,    // Particle separation force
-    collision_damping: 0.3,      // Collision velocity dampening
+    delay_ms: 0,                 // Frame delay (firmware only)
+    ..Config::default()          // num and color are overridden per effect
 };
+let mut simulation = EffectSwitcher::new(sim_config);
 ```
+
+Physics tuning constants live at the top of each effect module (e.g. `fluid.rs`).
 
 ## Dependencies
 
@@ -268,7 +267,7 @@ Custom linker error handler in `build.rs` provides helpful messages for common i
 ## Desktop Controls
 
 - **Mouse Drag**: Rotate cube (changes gravity direction in cube's local space; fast drags swirl the fluid)
-- **Double Click**: Switch effect (fluid / boids)
+- **Double Click**: Switch effect (fluid → boids → starfield)
 - **Arrow Keys**: Alternative rotation controls (Up/Down for pitch, Left/Right for yaw)
 - **Escape**: Exit application
 
