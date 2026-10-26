@@ -96,7 +96,7 @@ Core business logic with no hardware dependencies:
 - **effect.rs**: `SimulationEffect` trait defining the interface for all simulation implementations
 - **effects/**: Simulation effect implementations
   - **fluid.rs**: Fluid physics simulation with particle collision detection
-  - **boids.rs**: Flocking/swarming behavior simulation (tilt acts as wind, ignores spin)
+  - **boids.rs**: Flocking/swarming behavior simulation (tilt acts as wind, spin sweeps the flock round)
   - **switcher.rs**: `EffectSwitcher` runs one effect and cycles to the next on a double tap
     (firmware) or double click (desktop)
 - **physics_utils.rs**: Shared physics utilities used across effects
