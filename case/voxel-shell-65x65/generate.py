@@ -119,20 +119,24 @@ USB_BODY_DEPTH = 9.0
 USB_CUTOUT = (14.6, 8.6)  # check against your socket's body; flange laps 0.6 mm
 USB_WALL = 1.6
 USB_X = -9.2  # socket centre along the edge
-# Slide switch: SS12F15-style, plate 19.6 x 5.5 with M2 holes 11.5 apart,
-# 7.8 mm from the plate to the pin tips, 3 mm lever travel.
+# Slide switch: SS12F15-style. The plate is 19.6 long; its middle 11.5 is 5.5
+# wide and the ears with the M2 holes are 3.2 wide. The body behind the plate
+# is the full 11.5 x 5.5 of that middle part (it does not step in), 5.0 deep,
+# with solder lugs reaching 7.8 from the plate. 3 mm lever travel.
 SW_PLATE = (19.6, 5.5)
-SW_DEPTH = 7.8
+SW_BODY = (11.5, 5.5)  # switch body behind the plate, as wide as the plate
+SW_BODY_DEPTH = 5.0  # plate to the back of the body
+SW_DEPTH = 7.8  # plate to the lug tips
+SW_SOLDER = 2.5  # extra depth behind the lugs for solder joints and bent wires
 SW_PLATE_T = 0.6  # metal mounting plate thickness
-SW_BODY_W = 8.6  # switch body length behind the plate
-SW_HOLE_PITCH = 11.5
+SW_HOLE_PITCH = 15.0
 SW_SCREW_D = 0  # M2 screw holes through the wall (0 = glue; no room for nuts behind the plate)
-SW_SLOT = (6.6, 2.6)  # lever opening: 3 mm travel + lever + clearance; 2.6 tall (2.0 lever) keeps 1 mm to the faces
+SW_LEVER = (3.3, 2.0)  # lever cross-section
+SW_SLOT = (7.0, 2.6)  # lever opening: 3 mm travel + 3.3 lever + clearance; 2.6 tall (2.0 lever) keeps 1 mm to the faces
 SW_WALL = 2.1  # the plate pocket runs past the facet; 2.1 keeps its corner >= 1 mm under the faces
 SW_X = 10.0
 PART_FIT = 0.2  # clearance per side
 MIN_WALL = 1.0  # print-service minimum wall (PCBWay review asked for 1.0 mm)
-SW_BODY_H = 3.6  # switch body height across the facet
 WIRE_SLOT = (8.0, 6.0)  # wire channel from each pocket into the cube, along the diagonal;
 # 4.4 tall so it takes out the board-pocket lips where it passes instead of leaving slivers
 WIRE_LEN = 6.0  # how far the wire channel runs past the back of each pocket
@@ -295,11 +299,11 @@ def port_cut():
     # switch: plate sits against the inside of a thin wall, lever through a slot
     sw, sh = SW_PLATE[0] + 2 * f, SW_PLATE[1] + 2 * f
     plate = OUTER - SW_WALL
-    sw_back = plate - SW_DEPTH - 0.4
-    # full width only for the thin mounting plate; the body behind it is smaller
+    sw_back = plate - SW_DEPTH - SW_SOLDER
+    # full length only for the thin mounting plate; the body behind it is as wide but shorter
     cut = cut + box(SW_X - sw / 2, SW_X + sw / 2, -sh / 2, sh / 2, plate - SW_PLATE_T - 0.2, plate)
-    bh = SW_BODY_H / 2 + f
-    cut = cut + box(SW_X - SW_BODY_W / 2 - f, SW_X + SW_BODY_W / 2 + f, -bh, bh, sw_back, plate)
+    bw, bh = SW_BODY[0] / 2 + f, SW_BODY[1] / 2 + f
+    cut = cut + box(SW_X - bw, SW_X + bw, -bh, bh, sw_back, plate)
     cut = cut + box(SW_X - SW_SLOT[0] / 2, SW_X + SW_SLOT[0] / 2,
                     -SW_SLOT[1] / 2, SW_SLOT[1] / 2, plate - 1, OUTER + 1)
     if SW_SCREW_D:
@@ -307,9 +311,11 @@ def port_cut():
             cut = cut + Manifold.cylinder(SW_WALL + 2, SW_SCREW_D / 2, SW_SCREW_D / 2, SEG).translate(
                 [SW_X + dx, 0, plate - 1])
     # wire channels: straight on from the back of each pocket, between the two panels, into the cube
+    # (the switch's runs as wide as its body pocket, so the pocket ends leave no slivers)
     ww, wh = WIRE_SLOT
-    for x, zb in ((USB_X, usb_back), (SW_X, sw_back)):
-        cut = cut + box(x - ww / 2, x + ww / 2, -wh / 2, wh / 2, zb - WIRE_LEN, zb + 0.01)
+    wires = ((USB_X, usb_back, ww), (SW_X, sw_back, max(ww, 2 * bw)))
+    for x, zb, w in wires:
+        cut = cut + box(x - w / 2, x + w / 2, -wh / 2, wh / 2, zb - WIRE_LEN, zb + 0.01)
     # the snap wings only need the wall in a band around the middle; beyond it the
     # wall would taper to nothing under the faces, so open it (the flange covers it)
     band = BEVEL_S + USB_WALL - MIN_WALL * math.sqrt(2)  # faces run along v + w = BEVEL_S in the facet frame
@@ -321,9 +327,9 @@ def port_cut():
     # where a wire channel crosses the rim that rests on the board edge, clear that rim
     # strip too: otherwise the channel leaves a thin fin of it standing
     r0, r1 = HMAX - CLAMP_RING - 0.01, HMAX + FIT + 0.01
-    for x in (USB_X, SW_X):
-        cut = cut + box(x - ww / 2, x + ww / 2, -r1, -r0, Z_PCB - 0.01, Z_GRID)   # front shell
-        cut = cut + box(x - ww / 2, x + ww / 2, -Z_GRID, -Z_PCB + 0.01, r0, r1)   # bottom shell
+    for x, _, w in wires:
+        cut = cut + box(x - w / 2, x + w / 2, -r1, -r0, Z_PCB - 0.01, Z_GRID)   # front shell
+        cut = cut + box(x - w / 2, x + w / 2, -Z_GRID, -Z_PCB + 0.01, r0, r1)   # bottom shell
     return cut
 
 
@@ -386,13 +392,17 @@ def switch_model():
     """Reference model of the SS12F15 slide switch, placed in cube coordinates."""
     plate_z = OUTER - SW_WALL
     pw, ph = SW_PLATE
-    plate = box(SW_X - pw / 2, SW_X + pw / 2, -ph / 2, ph / 2, plate_z - 0.5, plate_z)
+    bl, bw = SW_BODY
+    # plate: 5.5 wide in the middle, 3.2 wide ears with the screw holes
+    plate = box(SW_X - pw / 2, SW_X + pw / 2, -1.6, 1.6, plate_z - 0.5, plate_z)
+    plate = plate + box(SW_X - bl / 2, SW_X + bl / 2, -ph / 2, ph / 2, plate_z - 0.5, plate_z)
     for dx in (-SW_HOLE_PITCH / 2, SW_HOLE_PITCH / 2):
         plate = plate - Manifold.cylinder(2, 1.0, 1.0, SEG).translate([SW_X + dx, 0, plate_z - 1])
-    body = box(SW_X - SW_BODY_W / 2, SW_X + SW_BODY_W / 2, -SW_BODY_H / 2, SW_BODY_H / 2, plate_z - 5.5, plate_z - 0.5)
-    pins = sum_all([box(SW_X + dx - 0.4, SW_X + dx + 0.4, -0.25, 0.25, plate_z - SW_DEPTH, plate_z - 5.5)
+    body = box(SW_X - bl / 2, SW_X + bl / 2, -bw / 2, bw / 2, plate_z - SW_BODY_DEPTH, plate_z - 0.5)
+    pins = sum_all([box(SW_X + dx - 0.75, SW_X + dx + 0.75, -0.25, 0.25, plate_z - SW_DEPTH, plate_z - SW_BODY_DEPTH)
                     for dx in (-3, 0, 3)])
-    lever = box(SW_X - 1.5 - 1.2, SW_X - 1.5 + 1.2, -1.0, 1.0, plate_z, OUTER + 2.5)
+    lw, lt = SW_LEVER
+    lever = box(SW_X - 1.5 - lw / 2, SW_X - 1.5 + lw / 2, -lt / 2, lt / 2, plate_z, OUTER + 2.5)
     return bevel_place(plate + body + pins + lever)
 
 
