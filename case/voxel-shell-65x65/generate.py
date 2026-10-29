@@ -119,8 +119,8 @@ USB_FLANGE = (15.8, 8.2, 2.0)
 USB_BODY = (12.2, 5.2)
 USB_BODY_DEPTH = 9.0
 USB_WINGS = 15.6
-USB_CUTOUT = (14.2, 5.6)  # drawing's panel cut-out 14.2 x 5.4, 0.2 taller for resin; flange laps 1.3 mm
-USB_WALL = 1.6
+USB_CUTOUT = (14.2, 5.5)  # drawing's panel cut-out 14.2 x 5.4, 0.1 taller for resin; flange laps 1.35 mm
+USB_WALL = 1.7  # wall the snap wings grip
 USB_X = -9.2  # socket centre along the edge
 # Slide switch: SS12F15-style. The plate is 19.6 long; its middle 11.5 is 5.5
 # wide and the ears with the M2 holes are 3.2 wide. The body behind the plate
@@ -278,28 +278,32 @@ def bevel_place(m):
     return m.translate([0, 0, -OUTER]).rotate([45, 0, 0]).translate([0, -c, c])
 
 
-def _blunt(x0, x1, v_edge, min_t=MIN_WALL):
-    """Square off the 45 degree wedges where a pocket wall at v = +-v_edge (facet
-    frame) runs out through the front or bottom face, so the shell is at least
-    min_t thick there. Returns the material to remove, in cube coordinates."""
-    c = math.sqrt(2) * v_edge
-    y_c = (c - OUTER) + min_t * math.sqrt(2)  # front face: cut back to here
-    v, d = BIG - 20, BIG - 10
-    front = bevel_place(box(x0, x1, v_edge, v, OUTER - d, OUTER + 10)) ^ box(x0, x1, -BIG, y_c, -BIG, BIG)
-    bottom = bevel_place(box(x0, x1, -v, -v_edge, OUTER - d, OUTER + 10)) ^ box(x0, x1, -BIG, BIG, -y_c, BIG)
-    return front + bottom
-
-
 def port_cut():
     """USB-C socket and slide switch cavities in cube coordinates (on the bottom front bevel)."""
     f = PART_FIT
     # USB-C: cut-out through the wall, wider pocket behind for body and snap wings
     cw, ch = USB_CUTOUT
     cut = box(USB_X - cw / 2, USB_X + cw / 2, -ch / 2, ch / 2, OUTER - USB_WALL - 1, OUTER + 1)
+    # The body is a little taller than the 5 mm bevel, so a straight cut-out would meet the
+    # faces at 45 degrees in a knife edge. Flare its mouth at right angles to the faces
+    # instead (under the flange), leaving a lip as deep as the wall
+    flare = USB_WALL + 1
+    cut = cut + Manifold.hull_points(np.array([[USB_X + sx * cw / 2, sy * h, z]
+                                               for sx in (-1, 1) for sy in (-1, 1)
+                                               for h, z in ((ch / 2, OUTER - USB_WALL), (ch / 2 + flare, OUTER + 1))]))
     pw = USB_FLANGE[0]  # pocket as wide as the flange, so every opening stays covered
     usb_back = OUTER - USB_WALL - USB_BODY_DEPTH + USB_FLANGE[2] - 0.5
-    ph = 8.6  # pocket taller than the body: one just around it leaves a thin wedge at the panel rim
-    cut = cut + box(USB_X - pw / 2, USB_X + pw / 2, -ph / 2, ph / 2, usb_back, OUTER - USB_WALL)
+    # The bevel is narrower than the pocket, so right behind the wall the pocket only just
+    # clears the body (0.15 a side), then opens at 45 degrees, parallel to the faces and
+    # 1 mm under them, to its full height: it never breaks out through a face
+    ph = 8.6  # full height; one just around the body leaves a thin wedge at the panel rim
+    h0 = ch / 2
+    z0 = OUTER - USB_WALL
+    z1 = z0 - (ph / 2 - h0)
+    taper = Manifold.hull_points(np.array([[USB_X + sx * pw / 2, sy * h, z]
+                                           for sx in (-1, 1) for sy in (-1, 1)
+                                           for h, z in ((h0, z0 + 0.01), (ph / 2, z1))]))
+    cut = cut + taper + box(USB_X - pw / 2, USB_X + pw / 2, -ph / 2, ph / 2, usb_back, z1 + 0.01)
     # switch: plate sits against the inside of a thin wall, lever through a slot
     sw, sh = SW_PLATE[0] + 2 * f, SW_PLATE[1] + 2 * f
     plate = OUTER - SW_WALL
@@ -320,14 +324,7 @@ def port_cut():
     wires = ((USB_X, usb_back, ww), (SW_X, sw_back, max(ww, 2 * bw)))
     for x, zb, w in wires:
         cut = cut + box(x - w / 2, x + w / 2, -wh / 2, wh / 2, zb - WIRE_LEN, zb + 0.01)
-    # the snap wings only need the wall in a band around the middle; beyond it the
-    # wall would taper to nothing under the faces, so open it (the flange covers it)
-    band = BEVEL_S + USB_WALL - MIN_WALL * math.sqrt(2)  # faces run along v + w = BEVEL_S in the facet frame
-    for sv in (1, -1):
-        lo, hi = sorted((sv * band, sv * (BIG - 20)))
-        cut = cut + box(USB_X - pw / 2, USB_X + pw / 2, lo, hi, OUTER - USB_WALL - 0.01, OUTER + 1)
     cut = bevel_place(cut)
-    cut = cut + _blunt(USB_X - pw / 2, USB_X + pw / 2, ph / 2)
     # where a wire channel crosses the rim that rests on the board edge, clear that rim
     # strip too: otherwise the channel leaves a thin fin of it standing
     r0, r1 = HMAX - CLAMP_RING - 0.01, HMAX + FIT + 0.01

@@ -56,7 +56,7 @@ bead-blast the outside for an even frosted diffusion.
 | Diffuser skin | 1.0 |
 | Clamp ring on the PCB margin | 0.6 (outer LEDs start 1.56 from the 65 mm edges) |
 | Edge bevel | 45°, 2.5 deep (5 mm facet), on all twelve edges |
-| USB-C cut-out | 14.2 × 5.6 in a 1.6 wall (supplier's panel cut-out 14.2 × 5.4); the flange (15.8 × 8.2) stays on the outside and covers it |
+| USB-C cut-out | 14.2 × 5.5 in a 1.7 wall (supplier's panel cut-out 14.2 × 5.4), mouth flared under the flange (15.8 × 8.2); the pocket behind widens at 45°, 1 mm under the faces, so nothing opens through them |
 | Switch lever slot | 7.0 × 2.6 in a 2.1 wall; the switch is glued in |
 | Switch pocket | 20.0 × 5.9 for the plate, 11.9 × 5.9 for the body, 10.3 deep behind the plate (lugs plus 2.5 for solder and wires) |
 
