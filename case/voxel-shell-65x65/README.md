@@ -39,7 +39,7 @@ bead-blast the outside for an even frosted diffusion.
 ## Bought parts
 
 - 6 × WS2812 8×8 panel, 65 × 66 × 1.6 mm (LED grid 8.125 mm pitch, centred)
-- 1 × snap-in USB-C socket with leads: flange 15.8 × 9.3 × 2.0, 9.0 deep behind the flange
+- 1 × snap-in USB-C socket with leads: flange 15.8 × 8.2 × 2.0, body 12.2 × 5.2, snap wings 15.6 across
 - 1 × SS12F15 slide switch: plate 19.6 long, 5.5 wide over the middle 11.5 (3.2 wide ears with the M2 holes); body 11.5 × 5.5 × 5.0 under the plate, lugs 7.8 deep
 - 24 × 2 mm dowel, about 5.5 mm long (1.75 mm filament works), for the mitre alignment holes
 
@@ -56,13 +56,12 @@ bead-blast the outside for an even frosted diffusion.
 | Diffuser skin | 1.0 |
 | Clamp ring on the PCB margin | 0.6 (outer LEDs start 1.56 from the 65 mm edges) |
 | Edge bevel | 45°, 2.5 deep (5 mm facet), on all twelve edges |
-| USB-C cut-out | 14.6 × 8.6 in a 1.6 wall; the flange (15.8 × 9.3) stays on the outside and covers it |
+| USB-C cut-out | 14.2 × 5.6 in a 1.6 wall (supplier's panel cut-out 14.2 × 5.4); the flange (15.8 × 8.2) stays on the outside and covers it |
 | Switch lever slot | 7.0 × 2.6 in a 2.1 wall; the switch is glued in |
 | Switch pocket | 20.0 × 5.9 for the plate, 11.9 × 5.9 for the body, 10.3 deep behind the plate (lugs plus 2.5 for solder and wires) |
 
-`USB_CUTOUT` is an estimate: the drawing only gives the flange size. Measure
-the body of your socket behind the flange and change it in `generate.py`
-before ordering.
+`USB_CUTOUT` follows the supplier drawing. If your socket differs, measure its
+body and change `USB_BODY` and `USB_CUTOUT` in `generate.py` before ordering.
 
 ## Assembly
 

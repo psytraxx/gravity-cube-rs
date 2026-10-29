@@ -110,13 +110,16 @@ PIN_AT = OUTER - 7.8  # where the pin axis meets the mitre (x = z = PIN_AT): 37 
 # bevel_place() turns it onto the facet.
 BEVEL_S = 2.5  # facet depth from the edge; meets each face BEVEL_S * sqrt(2) from the edge
 #
-# USB-C: snap-in socket with flying leads. Flange 15.8 x 9.3 x 2.0, body 9.0
-# deep behind it. The flange stays on the outside; the body goes through a
-# cut-out in a 1.6 mm wall (like the thin panel the socket is made for) and its
-# snap wings open into the wider pocket behind it.
-USB_FLANGE = (15.8, 9.3, 2.0)
+# USB-C: snap-in socket with flying leads (supplier drawing). Flange 15.8 x 8.2
+# x 2.0, body 12.2 x 5.2 behind it, snap wings 15.6 across. The flange stays on
+# the outside; the body goes through a cut-out in a 1.6 mm wall (like the thin
+# panel the socket is made for) and its snap wings open into the wider pocket
+# behind it.
+USB_FLANGE = (15.8, 8.2, 2.0)
+USB_BODY = (12.2, 5.2)
 USB_BODY_DEPTH = 9.0
-USB_CUTOUT = (14.6, 8.6)  # check against your socket's body; flange laps 0.6 mm
+USB_WINGS = 15.6
+USB_CUTOUT = (14.2, 5.6)  # drawing's panel cut-out 14.2 x 5.4, 0.2 taller for resin; flange laps 1.3 mm
 USB_WALL = 1.6
 USB_X = -9.2  # socket centre along the edge
 # Slide switch: SS12F15-style. The plate is 19.6 long; its middle 11.5 is 5.5
@@ -295,7 +298,8 @@ def port_cut():
     cut = box(USB_X - cw / 2, USB_X + cw / 2, -ch / 2, ch / 2, OUTER - USB_WALL - 1, OUTER + 1)
     pw = USB_FLANGE[0]  # pocket as wide as the flange, so every opening stays covered
     usb_back = OUTER - USB_WALL - USB_BODY_DEPTH + USB_FLANGE[2] - 0.5
-    cut = cut + box(USB_X - pw / 2, USB_X + pw / 2, -ch / 2, ch / 2, usb_back, OUTER - USB_WALL)
+    ph = 8.6  # pocket taller than the body: one just around it leaves a thin wedge at the panel rim
+    cut = cut + box(USB_X - pw / 2, USB_X + pw / 2, -ph / 2, ph / 2, usb_back, OUTER - USB_WALL)
     # switch: plate sits against the inside of a thin wall, lever through a slot
     sw, sh = SW_PLATE[0] + 2 * f, SW_PLATE[1] + 2 * f
     plate = OUTER - SW_WALL
@@ -323,7 +327,7 @@ def port_cut():
         lo, hi = sorted((sv * band, sv * (BIG - 20)))
         cut = cut + box(USB_X - pw / 2, USB_X + pw / 2, lo, hi, OUTER - USB_WALL - 0.01, OUTER + 1)
     cut = bevel_place(cut)
-    cut = cut + _blunt(USB_X - pw / 2, USB_X + pw / 2, ch / 2)
+    cut = cut + _blunt(USB_X - pw / 2, USB_X + pw / 2, ph / 2)
     # where a wire channel crosses the rim that rests on the board edge, clear that rim
     # strip too: otherwise the channel leaves a thin fin of it standing
     r0, r1 = HMAX - CLAMP_RING - 0.01, HMAX + FIT + 0.01
@@ -349,12 +353,12 @@ def usb_socket_parts():
 
     Facet frame first (front face of the flange at OUTER + flange thickness),
     then moved onto the bevel. Sizes from the supplier drawing: flange
-    15.8 x 9.3 x 2.0, 11.0 deep overall, 15.6 across the snap wings.
+    15.8 x 8.2 x 2.0, body 12.2 x 5.2, 15.6 across the snap wings.
     """
     fw, fh, ft = USB_FLANGE
     front = OUTER + ft
     back = front - USB_BODY_DEPTH - ft
-    bw, bh = USB_CUTOUT[0] - 0.4, USB_CUTOUT[1] - 0.4
+    bw, bh = USB_BODY
     # clear housing: rounded flange + rounded body
     housing = rounded_rect(fw, fh, 2.6, ft).translate([USB_X, 0, OUTER])
     housing = housing + rounded_rect(bw, bh, 1.4, OUTER - back).translate([USB_X, 0, back])
@@ -362,7 +366,7 @@ def usb_socket_parts():
     wing_z0, wing_z1 = OUTER - USB_WALL - 0.2, OUTER - USB_WALL - 3.6
     for sx in (-1, 1):
         x_in = USB_X + sx * bw / 2
-        x_out = USB_X + sx * 15.6 / 2
+        x_out = USB_X + sx * USB_WINGS / 2
         pts = []
         for y in (-1.8, 1.8):
             pts += [[x_in, y, wing_z0], [x_out, y, wing_z0], [x_in, y, wing_z1]]
