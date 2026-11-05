@@ -47,6 +47,8 @@ pub use types::{
 // Re-export simulation implementations for convenience
 pub use effects::boids::BoidsSimulation;
 pub use effects::fluid::FluidSimulation;
+pub use effects::starfield::StarfieldSimulation;
+pub use effects::switcher::EffectSwitcher;
 
 /// Alias for backwards compatibility - defaults to FluidSimulation.
 pub type Simulation = FluidSimulation;

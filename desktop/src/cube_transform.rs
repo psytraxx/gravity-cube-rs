@@ -34,6 +34,11 @@ impl CubeTransform {
         translate_back * rotate_x * rotate_y * translate_to_origin
     }
 
+    /// Rotation from the cube's local axes to world axes
+    pub fn orientation(&self) -> Quat {
+        Quat::from_rotation_x(self.rotation_x) * Quat::from_rotation_y(self.rotation_y)
+    }
+
     /// Get gravity in cube's local space
     /// World gravity is always (0, -1, 0), but we transform it to cube's local coordinates
     pub fn get_local_gravity(&self) -> Vec3 {

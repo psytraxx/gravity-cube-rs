@@ -96,13 +96,23 @@ Core business logic with no hardware dependencies:
 - **effect.rs**: `SimulationEffect` trait defining the interface for all simulation implementations
 - **effects/**: Simulation effect implementations
   - **fluid.rs**: Fluid physics simulation with particle collision detection
-  - **boids.rs**: Flocking/swarming behavior simulation
+  - **boids.rs**: Flocking/swarming behavior simulation (tilt acts as wind, spin sweeps the flock round)
+  - **starfield.rs**: Stars stream out of the centre and accelerate; the field is fixed in the
+    world, so turning the cube turns it around the stars (each step, star offsets are rotated
+    by the inverse of `set_rotation`). Ignores gravity
+  - **switcher.rs**: `EffectSwitcher` runs one effect and cycles fluid → boids → starfield on
+    a double tap (firmware) or double click (desktop). It dereferences to the running
+    `dyn SimulationEffect`. `effects()` is the single list of effects, each with its own
+    particle count and colour: add a new effect there
 - **physics_utils.rs**: Shared physics utilities used across effects
   - `apply_axis_boundary()`: Single-axis boundary collision with damping
   - `apply_boundary_3d()`: 3D boundary collision helper
   - `clamp_speed()`: Velocity magnitude limiting
   - `distance_squared()`: Fast distance calculation for collision detection
-  - `MotionFilter`: Splits IMU readings into slow gravity and amplified motion, so shaking sloshes the fluid
+  - `MotionFilter`: Complementary filter: turns its gravity estimate with the gyro, corrects it
+    towards the accelerometer, and amplifies the rest, so shaking sloshes the fluid but tilting
+    does not overshoot
+  - `rotate()`: Rotate a vector by a rotation vector (Rodrigues)
 
 Key fluid simulation algorithm:
 - Continuous floating-point particle positions (not grid-locked)
@@ -111,11 +121,14 @@ Key fluid simulation algorithm:
   derived from the distance actually moved (blocked particles come to rest)
 - Spatial-grid particle-particle collision detection
 - Display hysteresis: a particle's LED only moves once it is clearly in the next cell
+- Spin (`set_rotation`, radians per step in cube axes): the fluid lags against the spin and is
+  flung outwards (`ROTATION_LAG`, `CENTRIFUGAL_GAIN`)
 
 ### 2. Adapters Layer (Platform-Specific)
 
 **Firmware** (`firmware/src/adapters/`):
-- **bmi160.rs**: BMI160 IMU adapter (SPI communication)
+- **bmi160.rs**: Register-level BMI160 driver (SPI): accelerometer (±4g, 400 Hz), gyro
+  (±1000°/s, bias calibrated at boot), hardware double tap polled from the latched INT_STATUS_0
 - **ws2812.rs**: WS2812 LED adapter (RMT-based using esp-hal-smartled)
 - **panel_mapper.rs**: Maps 3D cube coordinates to 2D LED panel indices
   - 6 panels with different orientations (0°, 90°, 180°, 270°)
@@ -152,13 +165,17 @@ Event loop with every-frame physics updates:
 
 **Firmware** (`firmware/src/main.rs`)
 
-Embassy async tasks orchestrating the main loop:
-1. Read gravity from IMU
-2. Run simulation step
-3. Clear display
-4. Update pixels (converts continuous positions to discrete grid)
-5. Refresh display
-6. Delay for frame rate (35ms default)
+Runs on both cores so physics and LED output overlap:
+
+Core 0 (main loop):
+1. Read acceleration and gyro from IMU; a double tap switches effect
+2. Run simulation step with filtered gravity and the spin since the last frame
+3. Build the LED frame with `FrameBuilder` (converts continuous positions to discrete grid)
+4. Send the frame to core 1 over a one-slot channel (waits only if core 1 is still busy)
+5. Delay for frame rate (`delay_ms`)
+
+Core 1 (`led_task`, started with `esp_rtos::start_second_core`): receives frames and sends
+them to the LEDs with the blocking RMT driver (~11.5 ms per changed frame).
 
 ## Important Implementation Details
 
@@ -202,25 +219,19 @@ The simulation uses a continuous floating-point particle system with fluid-like 
 
 **Desktop**: Edit in `desktop/src/main.rs`
 
-Both use the same Config struct with fluid physics parameters:
+Both pass a base `Config` to `EffectSwitcher::new`; it sets the fields shared by every effect.
+Each effect's particle count (`num`) and full-brightness colour are set once in
+`core/src/effects/switcher.rs` (`effects()`); the firmware dims colours with `BRIGHTNESS`.
 ```rust
 let sim_config = Config {
     cube_size: 8,
-    num_particles: 256,          // 256 (desktop) or 128 (firmware)
-    velocity: 2.0,               // Legacy field (unused by fluid sim)
-    delay_ms: 35,                // Frame delay (firmware only)
-    color: Color::new(100, 180, 255),  // Cyan for water appearance
-
-    // Fluid physics parameters
-    gravity: 0.08,               // Gravity strength multiplier
-    damping: 0.92,               // Velocity reduction on boundary bounce
-    max_velocity: 0.6,           // Maximum velocity clamp
-    velocity_smoothing: 0.9,     // Acceleration integration smoothing
-    velocity_decay: 0.95,        // Per-frame velocity decay (friction)
-    collision_repulsion: 0.5,    // Particle separation force
-    collision_damping: 0.3,      // Collision velocity dampening
+    delay_ms: 0,                 // Frame delay (firmware only)
+    ..Config::default()          // num and color are overridden per effect
 };
+let mut simulation = EffectSwitcher::new(sim_config);
 ```
+
+Physics tuning constants live at the top of each effect module (e.g. `fluid.rs`).
 
 ## Dependencies
 
@@ -232,7 +243,6 @@ let sim_config = Config {
 - **esp-rtos**: RTOS integration enabling Embassy
 - **embassy-executor**: Async task executor
 - **embassy-time**: Async timers
-- **bmi160**: IMU driver
 - **esp-hal-smartled**: WS2812 LED driver using RMT
 
 ### Desktop
@@ -256,7 +266,8 @@ Custom linker error handler in `build.rs` provides helpful messages for common i
 
 ## Desktop Controls
 
-- **Mouse Drag**: Rotate cube (changes gravity direction in cube's local space)
+- **Mouse Drag**: Rotate cube (changes gravity direction in cube's local space; fast drags swirl the fluid)
+- **Double Click**: Switch effect (fluid → boids → starfield)
 - **Arrow Keys**: Alternative rotation controls (Up/Down for pitch, Left/Right for yaw)
 - **Escape**: Exit application
 

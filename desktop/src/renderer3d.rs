@@ -94,13 +94,7 @@ pub struct Renderer3D {
 impl Renderer3D {
     pub async fn new(window: std::sync::Arc<winit::window::Window>, color: Color) -> Self {
         let size = window.inner_size();
-
-        // Convert Color to normalized RGB
-        let base_color = [
-            color.r as f32 / 255.0,
-            color.g as f32 / 255.0,
-            color.b as f32 / 255.0,
-        ];
+        let base_color = normalized_rgb(color);
 
         // Create instance
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -492,6 +486,11 @@ impl Renderer3D {
         }
     }
 
+    /// Change the voxel colour, e.g. when switching effects.
+    pub fn set_color(&mut self, color: Color) {
+        self.base_color = normalized_rgb(color);
+    }
+
     pub fn update_cube_transform(&mut self, cube_transform: &CubeTransform) {
         let camera_uniform = CameraUniform {
             view_proj: self.camera.view_projection_matrix().to_cols_array_2d(),
@@ -656,4 +655,13 @@ impl Renderer3D {
 
         instances
     }
+}
+
+/// Convert a Color to normalized RGB.
+fn normalized_rgb(color: Color) -> [f32; 3] {
+    [
+        color.r as f32 / 255.0,
+        color.g as f32 / 255.0,
+        color.b as f32 / 255.0,
+    ]
 }

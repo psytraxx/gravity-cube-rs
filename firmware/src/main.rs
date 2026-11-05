@@ -6,18 +6,25 @@
     holding buffers for the duration of a data transfer."
 )]
 
+use core::sync::atomic::{AtomicU32, Ordering};
+
 use embassy_executor::Spawner;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Instant, Timer};
 use embedded_hal::spi::{Operation, SpiDevice};
 use esp_backtrace as _;
+use esp_hal::Blocking;
 use esp_hal::clock::CpuClock;
 use esp_hal::delay::Delay;
 use esp_hal::gpio::{Level, OutputConfig};
 use esp_hal::rmt::Rmt;
 use esp_hal::spi::master::Config as SpiConfig;
 use esp_hal::spi::master::Spi;
+use esp_hal::system::Stack;
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
+use esp_rtos::embassy::Executor;
 use log::{info, warn};
 use micromath::F32Ext;
 
@@ -25,14 +32,53 @@ extern crate alloc;
 
 use esp_hal_smartled::{RmtSmartLeds, buffer_size, color_order};
 use gravity_cube_core::physics_utils::MotionFilter;
-use gravity_cube_core::{Color, Config, Simulation, SimulationEffect, Vector3D, Vector3DExt};
+use gravity_cube_core::{Color, Config, EffectSwitcher, Vector3D, Vector3DExt};
 use smart_leds::RGB8;
+use static_cell::{ConstStaticCell, StaticCell};
 
 mod adapters;
-use adapters::{Bmi160Adapter, Ws2812Display};
+use adapters::bmi160::ImuReading;
+use adapters::ws2812::Frame;
+use adapters::{Bmi160Adapter, FrameBuilder, LED_COUNT, Ws2812Display};
 
 // This creates a default app-descriptor required by the esp-idf bootloader.
 esp_bootloader_esp_idf::esp_app_desc!();
+
+/// LED brightness out of 255. Effect colours are full brightness; at full power 384 LEDs
+/// would draw far too much current, and dim colours stay clearly visible.
+const BRIGHTNESS: u16 = 60;
+
+/// Scale a full-brightness effect colour down to `BRIGHTNESS`.
+fn dimmed(color: Color) -> Color {
+    let scale = |c: u8| (c as u16 * BRIGHTNESS / 255) as u8;
+    Color::new(scale(color.r), scale(color.g), scale(color.b))
+}
+
+type LedDriver =
+    RmtSmartLeds<'static, { buffer_size::<RGB8>(LED_COUNT) }, Blocking, RGB8, color_order::Grb>;
+
+/// Frames from the physics loop (core 0) to the LED task (core 1). One slot: core 0 computes
+/// the next frame while core 1 sends the current one, then waits if core 1 is still busy.
+static FRAMES: Channel<CriticalSectionRawMutex, Frame<RGB8>, 1> = Channel::new();
+
+/// Duration of the last LED send in microseconds, for the status log.
+static LED_SEND_US: AtomicU32 = AtomicU32::new(0);
+
+/// Sends frames to the LEDs on the second core.
+///
+/// The RMT driver refills its RAM in a blocking loop while sending (about 11.5 ms for 384
+/// LEDs), so giving it its own core keeps that time off the physics loop.
+#[embassy_executor::task]
+async fn led_task(display: &'static mut Ws2812Display<LedDriver>) {
+    loop {
+        let frame = FRAMES.receive().await;
+        let start = Instant::now();
+        if let Err(e) = display.show(&frame) {
+            warn!("Display refresh failed: {:?}", e);
+        }
+        LED_SEND_US.store(start.elapsed().as_micros() as u32, Ordering::Relaxed);
+    }
+}
 
 #[esp_rtos::main]
 async fn main(_spawner: Spawner) -> ! {
@@ -95,7 +141,7 @@ async fn main(_spawner: Spawner) -> ! {
         read_reg(0x0F)
     );
 
-    // Initialize BMI160 IMU
+    // Initialize BMI160 IMU; this also calibrates the gyro, so the cube should be still
     let mut imu_opt = match Bmi160Adapter::new(spi_device, &mut Delay::new()) {
         Ok(imu) => {
             info!("  ✓ BMI160 IMU initialized successfully");
@@ -108,7 +154,7 @@ async fn main(_spawner: Spawner) -> ! {
             warn!("      MISO → GPIO 13");
             warn!("      SCLK → GPIO 12");
             warn!("      CS   → GPIO 10");
-            warn!("    Continuing with default gravity (pointing down)");
+            warn!("    Continuing with default gravity (pointing down), no spin or taps");
             None
         }
     };
@@ -122,18 +168,34 @@ async fn main(_spawner: Spawner) -> ! {
     // Blocking mode refills the RMT RAM in a tight loop; in async mode the refill waits for
     // the executor and late refills corrupt the stream (visible as LED flicker). Four memory
     // blocks (all TX RAM on the S3) give 8 LEDs of slack instead of 2.
-    let led_driver =
-        RmtSmartLeds::<{ buffer_size::<RGB8>(384) }, _, RGB8, color_order::Grb>::new_with_memsize(
-            esp_hal_smartled::WS2812B_TIMING,
-            rmt.channel0,
-            peripherals.GPIO16,
-            4,
-            rmt_freq,
-        )
-        .expect("Failed to create LED driver");
+    let led_driver = LedDriver::new_with_memsize(
+        esp_hal_smartled::WS2812B_TIMING,
+        rmt.channel0,
+        peripherals.GPIO16,
+        4,
+        rmt_freq,
+    )
+    .expect("Failed to create LED driver");
 
-    let mut display = Ws2812Display::new(led_driver, 384);
+    // The driver holds a ~36 KB pulse buffer, so it lives in a static rather than on a stack
+    static DISPLAY: StaticCell<Ws2812Display<LedDriver>> = StaticCell::new();
+    let display = DISPLAY.init(Ws2812Display::new(led_driver));
     info!("  ✓ WS2812 LED driver initialized (384 LEDs on GPIO 16)");
+
+    // Hand the LEDs to the second core, which sends frames while this core runs physics
+    static APP_CORE_STACK: ConstStaticCell<Stack<8192>> = ConstStaticCell::new(Stack::new());
+    esp_rtos::start_second_core(
+        peripherals.CPU_CTRL,
+        peripherals.FROM_CPU_INTR1,
+        APP_CORE_STACK.take(),
+        move || {
+            static EXECUTOR: StaticCell<Executor> = StaticCell::new();
+            EXECUTOR
+                .init(Executor::new())
+                .run(|spawner| spawner.spawn(led_task(display).unwrap()));
+        },
+    );
+    info!("  ✓ LED output running on core 1");
 
     info!("");
     info!("Hardware initialization complete!");
@@ -144,27 +206,24 @@ async fn main(_spawner: Spawner) -> ! {
     // ========================================
     info!("Initializing physics simulation...");
 
-    // Dim green only: a single channel draws a fraction of the current of white, and
-    // the eye is most sensitive to green, so it stays visible at a low level
+    // Each effect sets its own particle count and colour
     let sim_config = Config {
-        color: Color::new(0, 60, 0),
         delay_ms: 0,
         ..Config::default()
     };
-
-    let mut simulation = Simulation::new(sim_config);
-    simulation.populate(sim_config.num_particles);
+    let mut simulation = EffectSwitcher::new(sim_config);
 
     info!(
         "  • Cube size: {}x{}x{}",
         sim_config.cube_size, sim_config.cube_size, sim_config.cube_size
     );
-    info!("  • Active particles: {}", sim_config.num_particles);
-    info!("  • Update rate: {}ms", sim_config.delay_ms);
     info!(
-        "  • LED color: RGB({}, {}, {})",
-        sim_config.color.r, sim_config.color.g, sim_config.color.b
+        "  • Effect: {} ({} particles)",
+        simulation.name(),
+        simulation.config().num
     );
+    info!("  • Update rate: {}ms", sim_config.delay_ms);
+    info!("  • Double-tap the cube to switch effects");
     info!("");
 
     // Wait for sensors to stabilize
@@ -178,46 +237,53 @@ async fn main(_spawner: Spawner) -> ! {
     // Main Loop
     // ========================================
     let mut loop_count = 0u32;
-    // Track gravity slowly and triple anything faster, so shaking the cube sloshes the fluid
+    // Track gravity with the gyro and triple anything else, so shaking the cube sloshes the fluid
     let mut motion = MotionFilter::new(0.05, 3.0);
+    let mut frame = FrameBuilder::<RGB8>::new();
+    let mut last_read = Instant::now();
 
     loop {
-        // Read acceleration from IMU (includes magnitude, not just direction)
-        // This makes particles respond to shaking and sudden movements
-        let acceleration = if let Some(ref mut imu) = imu_opt {
-            match imu.read_acceleration() {
-                Ok(a) => a,
-                Err(_) => {
-                    warn!("Failed to read IMU, using default gravity");
-                    Vector3D::new(0.0, 0.0, -1.0)
-                }
-            }
-        } else {
-            // No IMU available, use default gravity (towards z == 0, physically the bottom)
-            Vector3D::new(0.0, 0.0, -1.0)
+        // No IMU (or a failed read): default gravity towards z == 0, physically the bottom
+        let resting = || ImuReading {
+            acceleration: Vector3D::new(0.0, 0.0, -1.0),
+            angular_velocity: Vector3D::new(0.0, 0.0, 0.0),
         };
 
-        // Run physics simulation step with gravity plus amplified motion
+        // Read acceleration (with magnitude, so shaking sloshes the fluid) and rotation rate
+        let reading = if let Some(ref mut imu) = imu_opt {
+            if let Ok(true) = imu.double_tapped() {
+                simulation.next_effect();
+                info!("Double tap: switched to {} effect", simulation.name());
+            }
+            imu.read().unwrap_or_else(|_| {
+                warn!("Failed to read IMU, using default gravity");
+                resting()
+            })
+        } else {
+            resting()
+        };
+        let acceleration = reading.acceleration;
+
+        // How far the cube turned since the last reading
+        let now = Instant::now();
+        let dt = (now - last_read).as_micros() as f32 * 1e-6;
+        last_read = now;
+        let rotation = reading.angular_velocity * dt;
+
+        // Run physics simulation step with gravity plus amplified motion, and the spin
         let frame_start = Instant::now();
-        simulation.step(&motion.apply(acceleration));
+        simulation.set_rotation(rotation);
+        simulation.step(&motion.apply(acceleration, rotation));
         let physics_time = frame_start.elapsed();
 
-        // Clear display
-        if let Err(e) = display.clear().await {
-            warn!("Display clear failed: {:?}", e);
-        }
-
-        // Update display with active pixels
+        // Build the frame and hand it to core 1. This only waits if core 1 is still sending
+        // the frame before last, so physics and LED output overlap
+        let color = dimmed(simulation.config().color);
+        frame.clear();
         for pixel in simulation.active_pixels() {
-            if let Err(e) = display.set_pixel(pixel.position, sim_config.color).await {
-                warn!("Failed to set pixel at {:?}: {:?}", pixel.position, e);
-            }
+            frame.set_pixel(pixel.position, color);
         }
-
-        // Refresh display to show changes
-        if let Err(e) = display.refresh().await {
-            warn!("Display refresh failed: {:?}", e);
-        }
+        FRAMES.send(*frame.frame()).await;
 
         let frame_time = frame_start.elapsed();
 
@@ -230,19 +296,24 @@ async fn main(_spawner: Spawner) -> ! {
                 + acceleration.z * acceleration.z)
                 .sqrt();
             info!(
-                "Loop {}: {} particles, accel: ({:.2}, {:.2}, {:.2}) |{:.2}|g, physics {}us, frame {}us",
+                "Loop {}: {} {} particles, accel: ({:.2}, {:.2}, {:.2}) |{:.2}|g, gyro: ({:.2}, {:.2}, {:.2}) rad/s, physics {}us, frame {}us, LED send {}us",
                 loop_count,
                 active_count,
+                simulation.name(),
                 acceleration.x,
                 acceleration.y,
                 acceleration.z,
                 magnitude,
+                reading.angular_velocity.x,
+                reading.angular_velocity.y,
+                reading.angular_velocity.z,
                 physics_time.as_micros(),
-                frame_time.as_micros()
+                frame_time.as_micros(),
+                LED_SEND_US.load(Ordering::Relaxed)
             );
         }
 
         // Delay for next frame
-        Timer::after(Duration::from_millis(sim_config.delay_ms as u64)).await;
+        Timer::after(Duration::from_millis(simulation.config().delay_ms as u64)).await;
     }
 }
