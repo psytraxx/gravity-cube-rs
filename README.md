@@ -1,5 +1,12 @@
 # Gravity Cube - Rust Edition
 
+> **Archived.** Development continues in
+> [gravity-cube-espidf](https://github.com/psytraxx/gravity-cube-espidf): ESP-IDF
+> firmware in C with an incompressible FLIP fluid, Wi-Fi updates and the
+> enclosure (`case/`, moved there along with its 3D viewers at
+> <https://psytraxx.github.io/gravity-cube-espidf/>). This repository stays
+> readable as it was.
+
 A **fluid physics simulation** of gravity-responsive particles on a 3D LED cube, implemented in Rust using hexagonal architecture. Available in two flavors:
 
 - **Firmware**: Runs on ESP32 hardware with BMI160 IMU and WS2812 LEDs
